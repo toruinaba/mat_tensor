@@ -1,6 +1,7 @@
-from re import S
 import numpy as np
 
+TOL = 1.0e-06
+STEP = 100
 
 Ni = np.array([
     [1, 1, 1, 1, 1, 1],
@@ -59,7 +60,7 @@ i = np.array([1, 1, 1, 0, 0, 0])
 Id = Is - 1 / 3 * IxI
 
 E = 205000.0
-n = 0.0
+n = 0.3
 sig_y = 235
 H = 200.0
 b = 30.0
@@ -76,7 +77,7 @@ eps_e = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
 eps_p = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
 eff_eps_p = 0.0
 
-STEP = 1000
+goal_sig = np.array([400.0, 0.0, 0.0, 0.0, 0.0, 0.0])
 
 def calc_yield_stress(eff_eps_p):
     return sig_y + H * (1 - np.exp(-b * eff_eps_p))
@@ -90,51 +91,46 @@ eff_eps_ps = []
 
 for inc in range(STEP):
     print(f"ITERATION {inc}")
-    del_eps_tri = np.array([0.00001, 0, 0, 0, 0, 0])
+    del_eps_tri = np.array([0.0001, -0.0001*n, -0.0001*n, 0, 0, 0])
     eps += del_eps_tri
-    eps_e_tri = eps_e + del_eps_tri
-    eps_v_tri = 1 / 3 * (IxI) @ eps_e_tri
-    eps_v_tri_tr = (eps_v_tri[0] + eps_v_tri[1] + eps_v_tri[2])
-    p_tri = K * eps_v_tri_tr
+    eps_e_tri = eps - eps_p
+    eps_e_d_tri = Id @ eps_e_tri
+    eps_e_v_tri = 1 / 3 * IxI @ eps_e_tri
+    eps_e_v_tri_tr = eps_e_v_tri[0] + eps_e_v_tri[1] + eps_e_v_tri[2]
+    p_tri = K * eps_e_v_tri_tr
 
-    eps_d_tri = Id @ eps
-
-    sig_d_tri = 2 * G * eps_d_tri
-
+    sig_d_tri = 2 * G * eps_e_d_tri
     q_tri = np.sqrt(3 / 2 * sig_d_tri @ sig_d_tri)
+    n_vector = sig_d_tri / np.sqrt(sig_d_tri @ sig_d_tri)
+    
     y = calc_yield_stress(eff_eps_p)
-
-    f_tri = q_tri - y
-
-    if f_tri >= 0:
-        # yield
-        del_gam = 0.0
+    phi = q_tri - y
+    hd = calc_plastic_mod(eff_eps_p)
+    
+    del_gam = 0.0
+    if phi >= 0:
         for itr in range(10):
-            h = calc_plastic_mod(eff_eps_p + del_gam)
-            d = -3 * G - h
-            diff = q_tri - 3 * G * del_gam - calc_yield_stress(eff_eps_p + del_gam)
-            print(diff)
-            if abs(diff) < 0.01:
+            diff = q_tri - 3 * G * del_gam - y
+            del_gam += diff / (3 * G + hd)
+            y = calc_yield_stress(eff_eps_p + del_gam)
+            if abs(diff) < TOL * y:
                 print("Converged")
                 break
-            if itr == 9:
-                raise ValueError("NotConverged")
-            del_gam -= f_tri / d
-            
-        p = p_tri
-        sig_d = (1 - del_gam * 3 * G / q_tri) * sig_d_tri
-        sig = sig_d + p_tri * i
-        eps_e = 1 / (2 * G) * sig_d + 1 / 3 * eps_v_tri_tr * I
-        eff_eps_p += del_gam
-        miseses.append(np.sqrt(3 / 2 * sig_d @ sig_d))
-        eff_eps_ps.append(eff_eps_p)
+    eps_e_d = eps_e_d_tri - 3 / 2 * del_gam * n_vector
+    eps_p += 3 / 2 * del_gam * n_vector
+    eps_e = eps - eps_p
+    eff_eps_p += del_gam
+    sig_d = 2 * G * eps_e_d
+    mises = np.sqrt(3 / 2 * sig_d @ sig_d)
+    sig_v = p_tri * i
+    sig = sig_d + sig_v
 
-    else:
-        sig = sig_d_tri + p_tri * i
-        eps_e = eps_e_tri
-        eps_p = eps_p
-        miseses.append(q_tri)
-        eff_eps_ps.append(eff_eps_p)
+    
+    miseses.append(mises)
+    eff_eps_ps.append(eff_eps_p)
+
+    if inc >= 13:
+        break
 
 from matplotlib import pyplot as plt
 
