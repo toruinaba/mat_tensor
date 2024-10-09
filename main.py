@@ -86,19 +86,7 @@ def calc_yield_stress(eff_eps_p):
 def calc_plastic_mod(eff_eps_p):
     return H * b * np.exp(-b * eff_eps_p)
 
-miseses = []
-eff_eps_ps = []
-
-for inc in range(STEP):
-    print(f"ITERATION {inc}")
-    del_eps_tri = np.array([0.0001, -0.0001*n, -0.0001*n, 0, 0, 0])
-    eps += del_eps_tri
-    eps_e_tri = eps - eps_p
-    eps_e_d_tri = Id @ eps_e_tri
-    eps_e_v_tri = 1 / 3 * IxI @ eps_e_tri
-    eps_e_v_tri_tr = eps_e_v_tri[0] + eps_e_v_tri[1] + eps_e_v_tri[2]
-    p_tri = K * eps_e_v_tri_tr
-
+def return_mapping(eps_e_d_tri, eff_eps_p):
     sig_d_tri = 2 * G * eps_e_d_tri
     q_tri = np.sqrt(3 / 2 * sig_d_tri @ sig_d_tri)
     n_vector = sig_d_tri / np.sqrt(sig_d_tri @ sig_d_tri)
@@ -116,6 +104,45 @@ for inc in range(STEP):
             if abs(diff) < TOL * y:
                 print("Converged")
                 break
+    return q_tri, del_gam, n_vector, hd
+
+def calc_Dep(eps, eps_p):
+    eps_e_tri = eps - eps_p
+    eps_e_d_tri = Id @ eps_e_tri
+    q_tri, del_gam, n_vector, hd = return_mapping(eps_e_d_tri, eff_eps_p)
+    NxN = np.matrix(n_vector).transpose() @ np.matrix(n_vector)
+    Dep = (
+        2 * G * (1 - 3 * del_gam * G / q_tri) * Id +
+        6 * G**0.5 * (del_gam / q_tri - 1 / (3 * G + hd)) * NxN +
+        K * IxI
+    )
+    return np.array(Dep)
+
+
+for inc in range(STEP):
+    print(f"ITERATION {inc}")
+    del_sig = np.array([10.0, 0, 0, 0, 0, 0])
+    sig += del_sig
+    eps_tri = np.linalg.inv(De) @ sig
+    for itr in range(10):
+        Dep = calc_Dep(eps_tri, eps_p)
+        V = Dep @ eps_tri
+        diff = sig - Dep @ eps_tri
+        diff_norm = np.sqrt(diff @ diff)
+        if diff_norm < TOL:
+            print(diff_norm)
+            break
+        eps_tri -= np.linalg.inv(Dep) @ diff
+
+    eps = eps_tri
+    """
+    eps_e_tri = eps - eps_p
+    eps_e_d_tri = Id @ eps_e_tri
+    eps_e_v_tri = 1 / 3 * IxI @ eps_e_tri
+    eps_e_v_tri_tr = eps_e_v_tri[0] + eps_e_v_tri[1] + eps_e_v_tri[2]
+    p_tri = K * eps_e_v_tri_tr
+    q_tri, del_gam, n_vector, hd = return_mapping(eps_e_d_tri, eff_eps_p)
+
     eps_e_d = eps_e_d_tri - 3 / 2 * del_gam * n_vector
     eps_p += 3 / 2 * del_gam * n_vector
     eps_e = eps - eps_p
@@ -125,11 +152,15 @@ for inc in range(STEP):
     sig_v = p_tri * i
     sig = sig_d + sig_v
 
-    
-    miseses.append(mises)
-    eff_eps_ps.append(eff_eps_p)
+    NxN = np.matrix(n_vector).transpose() @ np.matrix(n_vector)
+    Dep = (
+        2 * G * (1 - 3 * del_gam * G / q_tri) * Id +
+        6 * G**0.5 * (del_gam / q_tri - 1 / (3 * G + hd)) * NxN +
+        K * IxI
+    )
+    """
 
-    if inc >= 13:
+    if inc >= 10:
         break
 
 from matplotlib import pyplot as plt
