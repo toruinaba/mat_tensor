@@ -30,6 +30,62 @@ class Elastic:
         return np.linalg.inv(self.De)
 
 
+class Plastic_behavior_base:
+    def __init__(self, elastic: Elastic, sig_y: float):
+        self.elastic = elastic
+        self.sig_y = sig_y
+
+    def initialize(self):
+        raise NotImplementedError()
+
+    def update(self):
+        raise NotImplementedError()
+
+    def calc_f_ip1(self):
+        raise NotImplementedError()
+
+    def calc_f_ip1_prime(self):
+        raise NotImplementedError()
+
+    def calc_Dep(self):
+        raise NotImplementedError()
+
+
+class Isotropic_voce(Plastic_behavior_base):
+    def __init__(self, elastic: Elastic, sig_y: float, Q: float, b: float):
+        super().__init__(elastic, sig_y)
+        self.Q = Q
+        self.b = b
+
+    def initialize(self):
+        self.r = 0.0
+        self.r_i = 0.0
+        self.eps_p = np.array([0.0]*6)
+        self.eps_p_i = np.array([0.0]*6)
+
+    def update_i(self, del_gam, n_bar):
+        theta = 1 / (1 + self.b * del_gam)
+        self.r_i = theta * (self.r + self.b * self.Q * del_gam)
+        delta_eps_p = np.sqrt(3 / 2) * del_gam * n_bar
+        self.eps_p_i = self.eps_p + delta_eps_p
+
+    def update(self):
+        self.r = self.r_i
+        self.eps_p = self.eps_p_i
+
+    def calc_f_ip1(self, r: float, theta: float, del_gam: float, q_tri: float):
+        return self.sig_y + theta * (r + self.b * self.Q * del_gam) + 3 * self.elastic.G * del_gam - q_tri
+
+    def calc_f_ip1_prime(self, r: float, theta: float, del_gam: float):
+        return 3 * self.elastic.G - self.b * theta**2 * (r + self.b * self.Q * del_gam) + theta * self.b * self.Q
+
+    def calc_Dep(self, q_tri: float, n_bar: np.ndarray, f_ip1_prime: float, del_gam: float):
+         return (
+             self.elastic.De -
+             6 * self.elastic.G**2 * del_gam / q_tri * Id +
+             6 * self.elastic.G**2 * (del_gam / q_tri - 1 / f_ip1_prime) * np.outer(n_bar, n_bar)
+         )
+
 class Isotropic_voce_s:
     def __init__(self, elastic: Elastic, sig_y: float, Q: float, b: float):
         self.elastic = elastic
