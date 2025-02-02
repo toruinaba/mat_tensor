@@ -55,3 +55,4 @@ Is = 0.5 * (I + I_t)
 i = np.array([1, 1, 1, 0, 0, 0])
 
 Id = Is - 1 / 3 * IxI
+Id_s = I - 1 / 3 * IxI
