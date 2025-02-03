@@ -1,11 +1,11 @@
 import numpy as np
 
-from util import Is, Id, IxI, Id_s
+from util import I, Is, Id, IxI, Id_s
 
 TOL = 1.0e-06
 STEP = 600
 RM_I = 10
-NW_I = 10
+NW_I = 100
 
 
 class Elastic:
@@ -101,16 +101,16 @@ class Linear_isotropic(Material_expression_base):
         norm = self.calc_stress_norm(sig_d)
         return np.sqrt(3 / 2) * norm, sig_d / norm
 
-    def calc_f_ip1(self, q_tri: float, del_gam: float):
+    def calc_f_ip1(self, q_tri: float, del_gam: float, n_bar: np.ndarray):
         return self.sig_y + (self.r + self.h * del_gam) + 3 * self.elastic.G * del_gam - q_tri
 
-    def calc_f_ip1_prime(self, del_gam: float):
+    def calc_f_ip1_prime(self, q_tri: float, del_gam: float, n_bar: np.ndarray):
         return 3 * self.elastic.G + self.h
 
     def calc_Dep(self, q_tri: float, del_gam: float, n_bar: np.ndarray):
          if del_gam == 0.0:
              return self.elastic.De
-         f_ip1_prime = self.calc_f_ip1_prime(del_gam)
+         f_ip1_prime = self.calc_f_ip1_prime(q_tri, del_gam, n_bar)
          return (
              self.elastic.De -
              6 * self.elastic.G**2 * del_gam / q_tri * Id +
@@ -148,16 +148,16 @@ class Linear_kinematic(Material_expression_base):
         norm = self.calc_stress_norm(eta)
         return np.sqrt(3 / 2) * norm, eta / norm
 
-    def calc_f_ip1(self, q_tri: float, del_gam: float):
+    def calc_f_ip1(self, q_tri: float, del_gam: float, n_bar: np.ndarray):
         return self.sig_y + 3 * self.elastic.G * del_gam + self.h * del_gam - q_tri
 
-    def calc_f_ip1_prime(self, del_gam: float):
+    def calc_f_ip1_prime(self, q_tri: float, del_gam: float, n_bar: np.ndarray):
         return 3 * self.elastic.G + self.h
 
     def calc_Dep(self, q_tri: float, del_gam: float, n_bar: np.ndarray):
          if del_gam == 0.0:
              return self.elastic.De
-         f_ip1_prime = self.calc_f_ip1_prime(del_gam)
+         f_ip1_prime = self.calc_f_ip1_prime(q_tri, del_gam, n_bar)
          return (
              self.elastic.De -
              6 * self.elastic.G**2 * del_gam / q_tri * Id +
@@ -199,23 +199,84 @@ class Voce_isotropic(Material_expression_base):
         norm = self.calc_stress_norm(sig_d)
         return np.sqrt(3 / 2) * norm, sig_d / norm
 
-    def calc_f_ip1(self, q_tri: float, del_gam: float):
+    def calc_f_ip1(self, q_tri: float, del_gam: float, n_bar: np.ndarray):
         theta = 1 / (1 + self.b * del_gam)
         return self.sig_y + theta * (self.r + self.b * self.Q * del_gam) + 3 * self.elastic.G * del_gam - q_tri
 
-    def calc_f_ip1_prime(self, del_gam: float):
+    def calc_f_ip1_prime(self, q_tri: float, del_gam: float, n_bar: np.ndarray):
         theta = 1 / (1 + self.b * del_gam)
         return 3 * self.elastic.G - self.b * theta**2 * (self.r + self.b * self.Q * del_gam) + theta * self.b * self.Q
 
     def calc_Dep(self, q_tri: float, del_gam: float, n_bar: np.ndarray):
          if del_gam == 0.0:
              return self.elastic.De
-         f_ip1_prime = self.calc_f_ip1_prime(del_gam)
+         f_ip1_prime = self.calc_f_ip1_prime(q_tri, del_gam, n_bar)
          return (
              self.elastic.De -
              6 * self.elastic.G**2 * del_gam / q_tri * Id +
              6 * self.elastic.G**2 * (del_gam / q_tri - 1 / f_ip1_prime) * np.outer(n_bar, n_bar)
          )
+
+
+class AF_kinematic(Material_expression_base):
+    def __init__(self, elastic: Elastic, sig_y: float, C: float, k: float):
+        super().__init__(elastic, sig_y)
+        self.C = C
+        self.k = k
+
+    def initialize(self):
+        self.alpha = np.array([0.0]*6)
+        self.alpha_i = np.array([0.0]*6)
+        self.eps_p = np.array([0.0]*6)
+        self.eps_p_i = np.array([0.0]*6)
+        self.eff_eps_p = 0.0
+        self.eff_eps_p_i = 0.0
+
+    def update_i(self, del_gam, n_bar):
+        delta_eps_p = np.sqrt(3 / 2) * del_gam * n_bar * np.array([1.0, 1.0, 1.0, 2.0, 2.0, 2.0])
+        theta = 1 / (1 + self.k * del_gam)
+        self.alpha_i = theta * (self.alpha + np.sqrt(2 / 3) * self.C * del_gam * n_bar)
+        self.eps_p_i = self.eps_p + delta_eps_p
+        self.eff_eps_p_i = self.eff_eps_p + del_gam
+
+    def update(self):
+        self.eps_p = self.eps_p_i
+        self.alpha = self.alpha_i
+        self.eff_eps_p = self.eff_eps_p_i
+
+    def calc_tri(self, sig_d):
+        eta = sig_d - self.alpha
+        norm = self.calc_stress_norm(eta)
+        return np.sqrt(3 / 2) * norm, eta / norm
+
+    def calc_f_ip1(self, q_tri: float, del_gam: float, n_bar: np.ndarray):
+        theta = 1 / (1 + self.k * del_gam)
+        return self.sig_y + 3 * self.elastic.G * del_gam + self.C * theta * del_gam - q_tri
+
+    def calc_f_ip1_prime(self, q_tri: float, del_gam: float, n_bar: np.ndarray):
+        theta = 1 / (1 + self.k * del_gam)
+        dotted = n_bar @ self.alpha #?
+        return (
+            3 * self.elastic.G +
+            self.C * theta -
+            self.k * self.C * theta**2 * del_gam
+            #- np.sqrt(3/2) * self.k * theta**2 * dotted
+        )
+
+    def calc_Dep(self, q_tri: float, del_gam: float, n_bar: np.ndarray):
+        if del_gam == 0.0:
+            return self.elastic.De
+        f_ip1_prime = self.calc_f_ip1_prime(q_tri, del_gam, n_bar)
+        theta = 1 / (1 + self.k * del_gam)
+        N4d = I - np.outer(n_bar, n_bar)
+        N4d_alpha = N4d @ self.alpha
+        
+        return (
+            self.elastic.De -
+            6 * self.elastic.G**2 * del_gam / q_tri * Id +
+            6 * self.elastic.G**2 * (del_gam / q_tri - 1 / f_ip1_prime) * np.outer(n_bar, n_bar) -
+            3 * np.sqrt(6) * self.elastic.G**2 * self.k * theta**2 * del_gam / (q_tri * f_ip1_prime) * np.outer(N4d_alpha, n_bar)
+        )
 
 
 class Calculator3D:
@@ -245,16 +306,16 @@ class Calculator3D:
             print(f"Return map iteration: {itr+1}")
             del_gam = 0.0
 
-            f_ip1 = self.material.calc_f_ip1(q_tri, del_gam)
-            f_ip1_prime = self.material.calc_f_ip1_prime(del_gam)
+            f_ip1 = self.material.calc_f_ip1(q_tri, del_gam, n_bar)
+            f_ip1_prime = self.material.calc_f_ip1_prime(q_tri, del_gam, n_bar)
             if f_ip1 < 0.0:
                 print("Plastic behavior")
                 for inew in range(RM_I):
                     print(f"Return map iteration {inew+1}")
                     d_del_gam = f_ip1 / f_ip1_prime
                     del_gam -= d_del_gam
-                    f_ip1 = self.material.calc_f_ip1(q_tri, del_gam)
-                    f_ip1_prime = self.material.calc_f_ip1_prime(del_gam)
+                    f_ip1 = self.material.calc_f_ip1(q_tri, del_gam, n_bar)
+                    f_ip1_prime = self.material.calc_f_ip1_prime(q_tri, del_gam, n_bar)
                     if abs(f_ip1) < TOL:
                         if del_gam < 0.0:
                             raise ValueError("Delta gamma is negative value.")
@@ -276,7 +337,7 @@ class Calculator3D:
 
         q_tri, n_bar = self.material.calc_tri(sig_d_tri)
         del_gam = self.return_mapping(q_tri, n_bar)
-        print(f"F: {self.material.calc_f_ip1(q_tri, del_gam)}")
+        print(f"F: {self.material.calc_f_ip1(q_tri, del_gam, n_bar)}")
         self.material.update_i(del_gam, n_bar)
         eps_e_i = eps_tri - self.material.eps_p_i
         sig_e = self.material.elastic.De @ eps_e_i
@@ -295,18 +356,15 @@ class Calculator3D:
             print("-"*80)
             print(f"Iteration: {itr+1}")
             sig_i, Dep = self.integrate_stress(del_eps)
-            #d_sig = Dep @ del_eps
             print(f"Corrected sig: {sig_i}")
-            #print(f"Corrected sig2: {self.sig + d_sig}")
             sig_diff = goal - sig_i
-            print(f"{sig_diff}")
             sig_diff_norm = self.calc_stress_norm(sig_diff)
             print(f"Difference norm: {sig_diff_norm}")
             if np.sqrt(3 / 2) * sig_diff_norm / self.material.yield_stress < TOL:
                 self.sig = goal
                 self.eps = self.eps + del_eps
                 self.material.update()
-                print(f"Iteration converged: itr.{itr+1}")
+                print(f"Stress integration converged: itr.{itr+1}")
                 break
             else:
                 print(f"itr.{itr+1}")
@@ -366,21 +424,23 @@ elastic = Elastic(E, n)
 linear_iso = Linear_isotropic(elastic, sig_y, 20000.0)
 linear_kin = Linear_kinematic(elastic, sig_y, 20000.0)
 voce_iso = Voce_isotropic(elastic, sig_y, Q, b)
-calculator = Calculator3D(linear_kin, np.array([300.0, 0.0, 0.0, 0.0, 0.0, 0.0]), 300)
+af_kin = AF_kinematic(elastic, sig_y, 40000.0, 300.0)
+calculator = Calculator3D(af_kin, np.array([300.0, 0.0, 0.0, 0.0, 0.0, 0.0]), 250)
 calculator.calculate_steps()
-"""
-calculator.goal_sig = np.array([0.0, 0.0, 0.0, -200.0, 0.0, 0.0])
+calculator.goal_sig = np.array([-300.0, 0.0, 0.0, 0.0, 0.0, 0.0])
 calculator.calculate_steps(is_init=False)
-calculator.goal_sig = np.array([0.0, 0.0, 0.0, 250.0, 0.0, 0.0])
+calculator.goal_sig = np.array([350.0, 0.0, 0.0, 0.0, 0.0, 0.0])
 calculator.calculate_steps(is_init=False)
-calculator.goal_sig = np.array([0.0, 0.0, 0.0, -300.0, 0.0, 0.0])
+calculator.goal_sig = np.array([-350.0, 0.0, 0.0, 0.0, 0.0, 0.0])
 calculator.calculate_steps(is_init=False)
-"""
+calculator.goal_sig = np.array([380.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+calculator.calculate_steps(is_init=False)
+calculator.goal_sig = np.array([-380.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+calculator.calculate_steps(is_init=False)
 
-x = [e for e in calculator.output.eff_eps_p]
-y = [s for s in calculator.output.mises]
 
-print((y[-1]-y[-2])/(x[-1]-x[-2]))
+x = [e[0] for e in calculator.output.eps_p]
+y = [s[0] for s in calculator.output.sig]
 
 from matplotlib import pyplot as plt
 
