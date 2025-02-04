@@ -1,11 +1,5 @@
 import numpy as np
-
 from util import I, Is, Id, IxI, Id_s
-
-TOL = 1.0e-06
-STEP = 600
-RM_I = 10
-NW_I = 100
 
 
 class Elastic:
@@ -615,6 +609,10 @@ class Chaboche_n(Material_expression_base):
 
 
 class Calculator3D:
+    TOL = 1.0e-06
+    RM_I = 10
+    NW_I = 100
+
     def __init__(self, material: Material_expression_base, goal_sig: np.ndarray, step: int):
         self.material = material
         self.goal_sig = goal_sig
@@ -636,7 +634,7 @@ class Calculator3D:
         self.output.initialize()
 
     def return_mapping(self, q_tri, n_bar):
-        for itr in range(NW_I):
+        for itr in range(self.NW_I):
             print("-"*80)
             print(f"Return map iteration: {itr+1}")
             del_gam = 0.0
@@ -645,19 +643,19 @@ class Calculator3D:
             f_ip1_prime = self.material.calc_f_ip1_prime(q_tri, del_gam, n_bar)
             if f_ip1 < 0.0:
                 print("Plastic behavior")
-                for inew in range(RM_I):
+                for inew in range(self.RM_I):
                     print(f"Return map iteration {inew+1}")
                     d_del_gam = f_ip1 / f_ip1_prime
                     del_gam -= d_del_gam
                     f_ip1 = self.material.calc_f_ip1(q_tri, del_gam, n_bar)
                     f_ip1_prime = self.material.calc_f_ip1_prime(q_tri, del_gam, n_bar)
-                    if abs(f_ip1) < TOL:
+                    if abs(f_ip1) < self.TOL:
                         if del_gam < 0.0:
                             raise ValueError("Delta gamma is negative value.")
                         print(f"Return map converged itr.{inew+1}")
                         print(f"Delta gamma: {del_gam}")
                         break
-                    if inew == RM_I - 1:
+                    if inew == self.RM_I - 1:
                         raise ValueError("Return map isn't converged")
             else:
                 print("Elastic behavior")
@@ -687,7 +685,7 @@ class Calculator3D:
         print(f"Goal sig: {goal}")
         print(f"Current sig: {self.sig}")
         print(f"Initial dela eps: {del_eps}")
-        for itr in range(NW_I):
+        for itr in range(self.NW_I):
             print("-"*80)
             print(f"Iteration: {itr+1}")
             sig_i, Dep = self.integrate_stress(del_eps)
@@ -695,7 +693,7 @@ class Calculator3D:
             sig_diff = goal - sig_i
             sig_diff_norm = self.calc_stress_norm(sig_diff)
             print(f"Difference norm: {sig_diff_norm}")
-            if np.sqrt(3 / 2) * sig_diff_norm / self.material.yield_stress < TOL:
+            if np.sqrt(3 / 2) * sig_diff_norm / self.material.yield_stress < self.TOL:
                 self.sig = goal
                 self.eps = self.eps + del_eps
                 self.material.update()
@@ -706,7 +704,7 @@ class Calculator3D:
                 d_del_eps = np.linalg.inv(Dep) @ sig_diff
                 del_eps += d_del_eps
                 print(f"Updated delta eps: {del_eps}")
-            if itr == NW_I - 1:
+            if itr == self.NW_I - 1:
                 raise ValueError(f"Not converged this iteration.")
 
     def calculate_steps(self, is_init=True):
