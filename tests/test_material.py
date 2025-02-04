@@ -116,12 +116,16 @@ class Test_af_kin:
         ghard1 = 6 * lame2 * lame2 * (del_gam / q_tri - 1 / f_ip1_prime)
         ghard2 = 3 * np.sqrt(6) * lame2 * lame2 * self.MAT.k * theta * theta * del_gam / (q_tri * f_ip1_prime)
 
-        n4d_alpha = np.zeros(6)
+        n4d = np.zeros((6, 6))
         for i_m in range(i_m):
-            n4d_alpha = 1 - n_bar[i_m] * n_bar[i_m]
+            n4d = 1.0
             for i_n in range(i_n):
-                n4d_alpha = - n_bar[i_m] * n_bar[i_n]
+                n4d -= n_bar[i_m] * n_bar[i_n]
 
+        n4d_alpha = np.zeros(6)
+        for i_m in range(2 * NTENS):
+            for i_n in range(2 * NTENS):
+                n4d_alpha[i_m] += n4d[i_m, i_n] * self.MAT.alpha[i_m]
 
         for i_m in range(NTENS):
             Dep_expect[i_m, i_m] += 2 * lame2 - eflame2
@@ -131,7 +135,7 @@ class Test_af_kin:
             Dep_expect[i_m, i_m] += lame2 - eflame3
         for i_m in range(2 * NTENS):
             for i_n in range(2 * NTENS):
-                Dep_expect[i_m, i_n] += ghard1 * n_bar[i_m] * n_bar[i_n]
+                Dep_expect[i_m, i_n] += ghard1 * n_bar[i_m] * n_bar[i_n] - ghard2 * n4d_alpha[i_m] * n_bar[i_n]
 
         # act
         Dep_act = self.MAT.calc_Dep(q_tri, del_gam, n_bar)
