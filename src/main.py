@@ -1,6 +1,6 @@
 import numpy as np
-from material import Elastic, Chaboche_n
-from core import Calculator3D
+from src.material import Elastic, Chaboche_n
+from src.core import Calculator3D
 
 E = 205000.0
 n = 0.3

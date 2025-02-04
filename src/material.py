@@ -1,5 +1,5 @@
 import numpy as np
-from util import I, Is, Id, IxI
+from src.util import I, Is, Id, IxI
 
 class Elastic:
     def __init__(self, E: float, n: float):

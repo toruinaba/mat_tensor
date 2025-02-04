@@ -1,6 +1,6 @@
 import numpy as np
-from util import IxI, Id_s
-from material import Material_expression_base
+from src.util import IxI, Id_s
+from src.material import Material_expression_base
 
 
 class Calculator3D:
