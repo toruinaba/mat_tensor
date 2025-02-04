@@ -246,6 +246,8 @@ class AF_kinematic(Material_expression_base):
 
     def calc_tri(self, sig_d):
         eta = sig_d - self.alpha
+        print(sig_d)
+        print(self.alpha)
         norm = self.calc_stress_norm(eta)
         return np.sqrt(3 / 2) * norm, eta / norm
 
@@ -277,6 +279,87 @@ class AF_kinematic(Material_expression_base):
             6 * self.elastic.G**2 * (del_gam / q_tri - 1 / f_ip1_prime) * np.outer(n_bar, n_bar) -
             3 * np.sqrt(6) * self.elastic.G**2 * self.k * theta**2 * del_gam / (q_tri * f_ip1_prime) * np.outer(N4d_alpha, n_bar)
         )
+
+
+class AF_kinematic_n(Material_expression_base):
+    def __init__(self, elastic: Elastic, sig_y: float, Cs: list[float], ks: list[float]):
+        super().__init__(elastic, sig_y)
+        self.Cs = Cs
+        self.ks = ks
+
+    @property
+    def number(self):
+        return len(self.Cs)
+
+    @property
+    def alpha(self):
+        return sum(self.alphas)
+
+    @property
+    def alpha_i(self):
+        return sum(self.alpha_is)
+
+    def initialize(self):
+        self.alphas = [np.array([0.0]*6)]*self.number
+        self.alpha_is = [np.array([0.0]*6)]*self.number
+        self.eps_p = np.array([0.0]*6)
+        self.eps_p_i = np.array([0.0]*6)
+        self.eff_eps_p = 0.0
+        self.eff_eps_p_i = 0.0
+
+    def update_i(self, del_gam, n_bar):
+        delta_eps_p = np.sqrt(3 / 2) * del_gam * n_bar * np.array([1.0, 1.0, 1.0, 2.0, 2.0, 2.0])
+        for n in range(self.number):
+            theta_n = 1 / (1 + self.ks[n] * del_gam)
+            self.alpha_is[n] = theta_n * (self.alphas[n] + np.sqrt(2 / 3) * self.Cs[n] * del_gam * n_bar)
+        self.eps_p_i = self.eps_p + delta_eps_p
+        self.eff_eps_p_i = self.eff_eps_p + del_gam
+
+    def update(self):
+        self.eps_p = self.eps_p_i
+        for n in range(self.number):
+            self.alphas[n] = self.alpha_is[n]
+        self.eff_eps_p = self.eff_eps_p_i
+
+    def calc_tri(self, sig_d):
+        eta = sig_d - self.alpha
+        print(sig_d)
+        print(self.alpha)
+        norm = self.calc_stress_norm(eta)
+        return np.sqrt(3 / 2) * norm, eta / norm
+
+    def calc_f_ip1(self, q_tri: float, del_gam: float, n_bar: np.ndarray):
+        E = 0.0
+        for n in range(self.number):
+            theta_n = 1 / (1 + self.ks[n] * del_gam)
+            E += self.Cs[n] * theta_n * del_gam
+        return self.sig_y + 3 * self.elastic.G * del_gam + E - q_tri
+
+    def calc_f_ip1_prime(self, q_tri: float, del_gam: float, n_bar: np.ndarray):
+        E_prime = 0.0
+        for n in range(self.number):
+            theta_n = 1 / (1 + self.ks[n] * del_gam)
+            E_prime += self.Cs[n] * (theta_n - self.ks[n] * theta_n**2 * del_gam)
+        return 3 * self.elastic.G + E_prime
+
+    def calc_Dep(self, q_tri: float, del_gam: float, n_bar: np.ndarray):
+        if del_gam == 0.0:
+            return self.elastic.De
+        f_ip1_prime = self.calc_f_ip1_prime(q_tri, del_gam, n_bar)
+        N4d = I - np.outer(n_bar, n_bar)
+        N4d_alpha = np.array([0.0]*6)
+        for n in range(self.number):
+            theta_n = 1 / (1 + self.ks[n] * del_gam)
+            N4d_alpha += self.ks[n] * theta_n**2 * N4d @ self.alphas[n]
+        
+        return (
+            self.elastic.De -
+            6 * self.elastic.G**2 * del_gam / q_tri * Id +
+            6 * self.elastic.G**2 * (del_gam / q_tri - 1 / f_ip1_prime) * np.outer(n_bar, n_bar) -
+            3 * np.sqrt(6) * self.elastic.G**2 * del_gam / (q_tri * f_ip1_prime) * np.outer(N4d_alpha, n_bar)
+        )
+
+
 
 
 class Calculator3D:
@@ -364,6 +447,7 @@ class Calculator3D:
                 self.sig = goal
                 self.eps = self.eps + del_eps
                 self.material.update()
+                print(self.material.alpha)
                 print(f"Stress integration converged: itr.{itr+1}")
                 break
             else:
@@ -425,22 +509,23 @@ linear_iso = Linear_isotropic(elastic, sig_y, 20000.0)
 linear_kin = Linear_kinematic(elastic, sig_y, 20000.0)
 voce_iso = Voce_isotropic(elastic, sig_y, Q, b)
 af_kin = AF_kinematic(elastic, sig_y, 40000.0, 300.0)
-calculator = Calculator3D(af_kin, np.array([300.0, 0.0, 0.0, 0.0, 0.0, 0.0]), 250)
+af_kin_n = AF_kinematic_n(elastic, sig_y, [40000.0, 20000.0, 10000.0, 2000.0, 500.0], [1000.0, 300.0, 100.0, 50.0, 20.0])
+calculator = Calculator3D(af_kin_n, np.array([0.0, 0.0, 0.0, 300.0, 0.0, 0.0]), 250)
 calculator.calculate_steps()
-calculator.goal_sig = np.array([-300.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+calculator.goal_sig = np.array([0.0, 0.0, 0.0, -300.0, 0.0, 0.0])
 calculator.calculate_steps(is_init=False)
-calculator.goal_sig = np.array([350.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+calculator.goal_sig = np.array([0.0, 0.0, 0.0, 350.0, 0.0, 0.0])
 calculator.calculate_steps(is_init=False)
-calculator.goal_sig = np.array([-350.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+calculator.goal_sig = np.array([0.0, 0.0, 0.0, -350.0, 0.0, 0.0])
 calculator.calculate_steps(is_init=False)
-calculator.goal_sig = np.array([380.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+calculator.goal_sig = np.array([0.0, 0.0, 0.0, 380.0, 0.0, 0.0])
 calculator.calculate_steps(is_init=False)
-calculator.goal_sig = np.array([-380.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+calculator.goal_sig = np.array([0.0, 0.0, 0.0, -380.0, 0.0, 0.0])
 calculator.calculate_steps(is_init=False)
 
 
-x = [e[0] for e in calculator.output.eps_p]
-y = [s[0] for s in calculator.output.sig]
+x = [e[3] for e in calculator.output.eps]
+y = [s[3] for s in calculator.output.sig]
 
 from matplotlib import pyplot as plt
 
