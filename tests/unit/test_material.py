@@ -10,14 +10,15 @@ class Test_elastic:
     def test_De(self):
         # arange
         De_expect = np.zeros([6, 6])
-        lame1 = NU * E / (1 + NU) / (1 - 2 * NU)
-        lame2 = E / 2 / (1 + NU) # = G
+        lame = NU * E / (1 + NU) / (1 - 2 * NU)
+        G = E / 2 / (1 + NU)
+        G2 = 2 * G
         for i_m in range(NTENS):
-            De_expect[i_m, i_m] += 2 * lame2
+            De_expect[i_m, i_m] += G2
             for i_n in range(NTENS):
-                De_expect[i_m, i_n] += lame1
+                De_expect[i_m, i_n] += lame
         for i_m in range(NTENS, 2 * NTENS):
-            De_expect[i_m, i_m] += lame2
+            De_expect[i_m, i_m] += G
 
         # act
         De_act = Elastic(205000.0, 0.3).De
@@ -62,8 +63,9 @@ class Test_linear_iso:
     def test_Dep(self):
         # arange
         Dep_expect = np.zeros([6, 6])
-        lame1 = NU * E / (1 + NU) / (1 - 2 * NU)
-        lame2 = E / 2 / (1 + NU)
+        lame = NU * E / (1 + NU) / (1 - 2 * NU)
+        G = E / 2 / (1 + NU)
+        G2 = 2 * G
         self.MAT.initialize()
 
         sig = np.array([300.0, 5.0, 30.0, 10.0, 20.0, 50.0])
@@ -73,17 +75,17 @@ class Test_linear_iso:
         self.MAT.update_i(del_gam, n_bar)
         self.MAT.update()
         f_ip1_prime = self.MAT.calc_f_ip1_prime(q_tri, del_gam, n_bar)
-        eflame1 = 2 * lame2 * lame2 * del_gam / q_tri
-        eflame2 = 3 * eflame1
-        eflame3 = 0.5 * eflame2
-        ghard = 6 * lame2 * lame2 * (del_gam / q_tri - 1 / f_ip1_prime)
+        efG2 = G2 * G * del_gam / q_tri
+        efG6 = 3 * efG2
+        efG3 = 0.5 * efG6
+        ghard = 6 * G * G * (del_gam / q_tri - 1 / f_ip1_prime)
 
         for i_m in range(NTENS):
-            Dep_expect[i_m, i_m] += 2 * lame2 - eflame2
+            Dep_expect[i_m, i_m] += G2 - efG6
             for i_n in range(NTENS):
-                Dep_expect[i_m, i_n] += lame1 + eflame1
+                Dep_expect[i_m, i_n] += lame + efG2
         for i_m in range(NTENS, 2 * NTENS):
-            Dep_expect[i_m, i_m] += lame2 - eflame3
+            Dep_expect[i_m, i_m] += G - efG3
         for i_m in range(2 * NTENS):
             for i_n in range(2 * NTENS):
                 Dep_expect[i_m, i_n] += ghard * n_bar[i_m] * n_bar[i_n]
@@ -100,8 +102,9 @@ class Test_af_kin:
     def test_Dep(self):
         # arange
         Dep_expect = np.zeros([6, 6])
-        lame1 = NU * E / (1 + NU) / (1 - 2 * NU)
-        lame2 = E / 2 / (1 + NU)
+        lame = NU * E / (1 + NU) / (1 - 2 * NU)
+        G = E / 2 / (1 + NU)
+        G2 = 2 * G
         self.MAT.initialize()
 
         sig = np.array([300.0, 5.0, 30.0, 10.0, 20.0, 50.0])
@@ -112,30 +115,24 @@ class Test_af_kin:
         self.MAT.update()
         theta = 1 / (1 + self.MAT.k * del_gam)
         f_ip1_prime = self.MAT.calc_f_ip1_prime(q_tri, del_gam, n_bar)
-        eflame1 = 2 * lame2 * lame2 * del_gam / q_tri
-        eflame2 = 3 * eflame1
-        eflame3 = 0.5 * eflame2
-        ghard1 = 6 * lame2 * lame2 * (del_gam / q_tri - 1 / f_ip1_prime)
-        ghard2 = 3 * np.sqrt(6) * lame2 * lame2 * self.MAT.k * theta * theta * del_gam / (q_tri * f_ip1_prime)
-
-
-        n4d = np.zeros((6, 6))
-        for i_m in range(2 * NTENS):
-            n4d[i_m, i_m] += 1.0
-            for i_n in range(2 * NTENS):
-                n4d[i_m, i_n] -= n_bar[i_m] * n_bar[i_n]
+        efG2 = G2 * G * del_gam / q_tri
+        efG6 = 3 * efG2
+        efG3 = 0.5 * efG6
+        ghard1 = 6 * G * G * (del_gam / q_tri - 1 / f_ip1_prime)
+        ghard2 = 3 * np.sqrt(6) * G * G * self.MAT.k * theta * theta * del_gam / (q_tri * f_ip1_prime)
 
         n4d_alpha = np.zeros(6)
         for i_m in range(2 * NTENS):
+            n4d_alpha[i_m] = self.MAT.alpha[i_m]
             for i_n in range(2 * NTENS):
-                n4d_alpha[i_m] += n4d[i_m, i_n] * self.MAT.alpha[i_n]
+                n4d_alpha[i_m] -= n_bar[i_m]*n_bar[i_n]*self.MAT.alpha[i_n]
 
         for i_m in range(NTENS):
-            Dep_expect[i_m, i_m] += 2 * lame2 - eflame2
+            Dep_expect[i_m, i_m] = 2 * G - efG6
             for i_n in range(NTENS):
-                Dep_expect[i_m, i_n] += lame1 + eflame1
+                Dep_expect[i_m, i_n] += lame + efG2
         for i_m in range(NTENS, 2 * NTENS):
-            Dep_expect[i_m, i_m] += lame2 - eflame3
+            Dep_expect[i_m, i_m] = G - efG3
         for i_m in range(2 * NTENS):
             for i_n in range(2 * NTENS):
                 Dep_expect[i_m, i_n] += ghard1 * n_bar[i_m] * n_bar[i_n] - ghard2 * n4d_alpha[i_m] * n_bar[i_n]
@@ -152,8 +149,9 @@ class Test_chaboche_n:
     def test_Dep(self):
         # arange
         Dep_expect = np.zeros([6, 6])
-        lame1 = NU * E / (1 + NU) / (1 - 2 * NU)
-        lame2 = E / 2 / (1 + NU)
+        lame = NU * E / (1 + NU) / (1 - 2 * NU)
+        G = E / 2 / (1 + NU)
+        G2 = 2 * G
         self.MAT.initialize()
 
         sig = np.array([300.0, 5.0, 30.0, 10.0, 20.0, 50.0])
@@ -163,11 +161,11 @@ class Test_chaboche_n:
         self.MAT.update_i(del_gam, n_bar)
         self.MAT.update()
         f_ip1_prime = self.MAT.calc_f_ip1_prime(q_tri, del_gam, n_bar)
-        eflame1 = 2 * lame2 * lame2 * del_gam / q_tri
-        eflame2 = 3 * eflame1
-        eflame3 = 0.5 * eflame2
-        ghard1 = 6 * lame2 * lame2 * (del_gam / q_tri - 1 / f_ip1_prime)
-        ghard2 = 3 * np.sqrt(6) * lame2 * lame2 * del_gam / (q_tri * f_ip1_prime)
+        efG2 = G2 * G * del_gam / q_tri
+        efG6 = 3 * efG2
+        efG3 = 0.5 * efG6
+        ghard1 = 6 * G * G * (del_gam / q_tri - 1 / f_ip1_prime)
+        ghard2 = 3 * np.sqrt(6) * G * G * del_gam / (q_tri * f_ip1_prime)
 
 
         n4d = np.zeros((6, 6))
@@ -184,11 +182,11 @@ class Test_chaboche_n:
                     n4d_alpha[i_m] += self.MAT.ks[n] * theta_n * theta_n * n4d[i_m, i_n] * self.MAT.alphas[n][i_n]
 
         for i_m in range(NTENS):
-            Dep_expect[i_m, i_m] += 2 * lame2 - eflame2
+            Dep_expect[i_m, i_m] += 2 * G - efG6
             for i_n in range(NTENS):
-                Dep_expect[i_m, i_n] += lame1 + eflame1
+                Dep_expect[i_m, i_n] += lame + efG2
         for i_m in range(NTENS, 2 * NTENS):
-            Dep_expect[i_m, i_m] += lame2 - eflame3
+            Dep_expect[i_m, i_m] += G - efG3
         for i_m in range(2 * NTENS):
             for i_n in range(2 * NTENS):
                 Dep_expect[i_m, i_n] += ghard1 * n_bar[i_m] * n_bar[i_n] - ghard2 * n4d_alpha[i_m] * n_bar[i_n]

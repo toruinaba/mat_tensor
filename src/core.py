@@ -28,22 +28,20 @@ class Calculator3D:
         self.sig = np.array([0.0]*6)
         self.output.initialize()
 
-    def return_mapping(self, q_tri, n_bar):
+    def return_mapping(self, sig_d_tri):
         for itr in range(self.NW_I):
             print("-"*80)
-            print(f"Return map iteration: {itr+1}")
             del_gam = 0.0
-
-            f_ip1 = self.material.calc_f_ip1(q_tri, del_gam, n_bar)
-            f_ip1_prime = self.material.calc_f_ip1_prime(q_tri, del_gam, n_bar)
+            f_ip1 = self.material.calc_f_ip1(sig_d_tri, del_gam)
+            f_ip1_prime = self.material.calc_f_ip1_prime(sig_d_tri, del_gam)
             if f_ip1 < 0.0:
                 print("Plastic behavior")
                 for inew in range(self.RM_I):
-                    print(f"Return map iteration {inew+1}")
+                    print(f"Newton iteration {inew+1}")
                     d_del_gam = f_ip1 / f_ip1_prime
                     del_gam -= d_del_gam
-                    f_ip1 = self.material.calc_f_ip1(q_tri, del_gam, n_bar)
-                    f_ip1_prime = self.material.calc_f_ip1_prime(q_tri, del_gam, n_bar)
+                    f_ip1 = self.material.calc_f_ip1(sig_d_tri, del_gam)
+                    f_ip1_prime = self.material.calc_f_ip1_prime(sig_d_tri, del_gam)
                     if abs(f_ip1) < self.TOL:
                         if del_gam < 0.0:
                             raise ValueError("Delta gamma is negative value.")
@@ -54,24 +52,22 @@ class Calculator3D:
                         raise ValueError("Return map isn't converged")
             else:
                 print("Elastic behavior")
-            return del_gam
+            q_tri, n_bar = self.material.calc_tri(sig_d_tri, del_gam)
+            return q_tri, del_gam, n_bar
 
     def integrate_stress(self, del_eps):
         eps_tri = self.eps + del_eps
         eps_e_tri = eps_tri - self.material.eps_p
         sig_tri = self.material.elastic.De @ eps_e_tri
         sig_d_tri = Id_s @ sig_tri
-        sig_v_tri = 1 / 3 * IxI @ sig_tri
 
-        q_tri, n_bar = self.material.calc_tri(sig_d_tri)
-        del_gam = self.return_mapping(q_tri, n_bar)
-        print(f"F: {self.material.calc_f_ip1(q_tri, del_gam, n_bar)}")
+        q_tri, del_gam, n_bar = self.return_mapping(sig_d_tri)
+        print(f"F: {self.material.calc_f_ip1(sig_d_tri, del_gam)}")
         self.material.update_i(del_gam, n_bar)
         eps_e_i = eps_tri - self.material.eps_p_i
         sig_e = self.material.elastic.De @ eps_e_i
-        sig_d = Id_s @ sig_e
-        sig = sig_d + sig_v_tri
-        Dep = self.material.calc_Dep(q_tri, del_gam, n_bar)
+        sig = sig_tri - 2 * self.material.elastic.G * del_gam * n_bar * np.sqrt(3 / 2)
+        Dep = self.material.calc_Dep(sig_d_tri, del_gam)
         return sig, Dep
 
     def calc_increment(self, goal):
