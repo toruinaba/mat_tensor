@@ -36,7 +36,7 @@ class Calculator3D:
         for itr in range(self.NW_I):
             print("-"*80)
             print(f"Iteration: {itr+1}")
-            sig_i, Dep = self.material.integrate_stress(self.eps + del_eps)
+            sig_i, Dep = self.material.integrate_stress(self.eps, del_eps)
             print(f"Corrected sig: {sig_i}")
             sig_diff = goal - sig_i
             sig_diff_norm = self.calc_stress_norm(sig_diff)

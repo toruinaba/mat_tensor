@@ -1,5 +1,5 @@
 import numpy as np
-from material import Elastic, AF_kinematic, Chaboche
+from material import Elastic, AF_kinematic, Chaboche, Yoshida_uemori
 from src.core import Calculator3D
 
 E = 205000.0
@@ -8,11 +8,8 @@ sig_y = 200
 
 elastic = Elastic(E, n)
 chaboche = Chaboche(elastic, 200.0, 20000.0, 30.0, 300.0, 100.0)
-calculator = Calculator3D(chaboche, np.array([0.0, 0.0, 312.581, 0.0, 0.0, 0.0]), 300)
-calculator.calculate_steps()
-calculator = Calculator3D(chaboche, np.array([0.0, 0.0, -393.986, 0.0, 0.0, 0.0]), 300)
-calculator.calculate_steps()
-calculator = Calculator3D(chaboche, np.array([0.0, 0.0, 434.79, 0.0, 0.0, 0.0]), 300)
+yu = Yoshida_uemori(elastic, 124.0, 168.0, 500.0, 190.0, 12.0, 9.0, 0.5)
+calculator = Calculator3D(yu, np.array([0.0, 0.0, 312.581, 0.0, 0.0, 0.0]), 300)
 calculator.calculate_steps()
 
 
