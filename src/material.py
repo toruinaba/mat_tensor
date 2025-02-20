@@ -751,7 +751,8 @@ class Yoshida_uemori:
         norm = self.calc_stress_norm(eta)
         return np.sqrt(3 / 2) * norm, eta / norm * np.sqrt(3 / 2)
 
-    def calc_f(self, sig_d, delta_beta, delta_theta):
+    def calc_f(self, sig_d_tri, delta_beta, delta_theta, delta_gam, n_i):
+        sig_d = sig_d_tri - 2 * self.elastic.G * delta_gam * n_i
         theta_i = self.theta + delta_theta
         beta_i = self.beta + delta_beta
         eta = sig_d - theta_i - beta_i
@@ -788,9 +789,10 @@ class Yoshida_uemori:
         sig_i = sig_d + del_s
         beta_i = self.beta + del_b
         theta_i = self.theta + del_th
-        g_sig_i, n_i = self.calc_i(sig_i, del_b, del_th)
+        eta_i = sig_i - beta_i - theta_i
+        g_sig_i, n_i = self.calc_g(eta_i)
         sig_i_d_tri = sig_d_tri - 2 * del_gam * self.elastic.G * n_i
-        f_i = self.calc_f(sig_i_d_tri, del_b, del_th)
+        f_i = self.calc_f(sig_i_d_tri, del_b, del_th, del_gam, n_i)
         theta_bar, n_theta = self.calc_g(theta_i)
         th = 1.0 / (1.0 + self.k * del_gam)
         R_i = self.R * th + self.k * self.Rsat * del_gam * th
@@ -800,7 +802,7 @@ class Yoshida_uemori:
         if theta_bar == 0.0:
             g3 = del_th
         else:
-            g3 = del_th - (a_i * self.C * del_gam / self.sig_y) * (sig_i - beta_i - theta_i) + self.C * del_gam * np.sqrt(a_i / theta_bar) * theta_i
+            g3 = del_th - (a_i * self.C * del_gam / self.sig_y) * eta_i + self.C * del_gam * np.sqrt(a_i / theta_bar) * theta_i
         g4 = del_b - (self.k * self.b * del_gam / self.sig_y) + del_gam * self.k * beta_i
         vectors = ([g1], g2, g3, g4)
         return np.concat(vectors), n_i
@@ -810,7 +812,7 @@ class Yoshida_uemori:
     
     def calc_mat_g2(self, n_i, delta_gam):
         dn_dsig = Id - np.outer(n_i, n_i)
-        sig_term = self.elastic.De_inv - dn_dsig * delta_gam
+        sig_term = self.elastic.De_inv + dn_dsig * delta_gam
         beta_term = - delta_gam * dn_dsig
         theta_term = - delta_gam * dn_dsig
         matrices = (np.matrix(sig_term), np.matrix(beta_term), np.matrix(theta_term), np.matrix(n_i).transpose())
@@ -819,7 +821,7 @@ class Yoshida_uemori:
     def calc_mat_g3(self, theta, eta, h, a, delta_gam):
         theta_bar, n_theta = self.calc_g(theta)
         if theta_bar == 0.0:
-            dg3_dtheta = 1.0
+            dg3_dtheta = 1.0 + a * self.C * delta_gam / self.sig_y 
             dg3_dd_gam = - (a * self.C / self.sig_y +  h * self.C * delta_gam / self.sig_y) * eta
         else:
             dg3_dtheta = 1.0 + a * self.C * delta_gam / self.sig_y + self.C * delta_gam * np.sqrt(a / theta_bar) - self.C * delta_gam * np.sqrt(a) / (2 * np.sqrt(theta_bar)) * np.sqrt(3 / 2)
@@ -851,8 +853,8 @@ class Yoshida_uemori:
         R_i = self.R * th + self.k * self.Rsat * delta_gam * th
         h_i = self.k * (self.Rsat - R_i)
         a_i = self.B + R_i - self.sig_y
-        n_v = a_i * self.C / self.sig_y * eta_i - self.C * np.sqrt(a_i / theta_bar) + self.k * self.b / self.sig_y * eta_i - self.k * beta_i
-        dn_dsig = I - np.outer(n_i, n_i)
+        n_v = a_i * self.C / self.sig_y * eta_i - self.C * np.sqrt(a_i / theta_bar) * theta_i + self.k * self.b / self.sig_y * eta_i - self.k * beta_i
+        dn_dsig = Id - np.outer(n_i, n_i)
         n_inc = dn_dsig @ n_v
         TH = self.elastic.De_inv + delta_gam * dn_dsig
         TH_inv = np.linalg.inv(TH)
@@ -873,10 +875,17 @@ class Yoshida_uemori:
             g_vector, n_i = self.calc_g_vector(sig_d_tri, sig_d, delta_sig, delta_beta, delta_theta, delta_gam)
             for inew in range(self.RM_I):
                 print(f"Newton iteration {inew+1}")
-                d_delta_vector = np.array((np.linalg.inv(hessian) @ g_vector)).flatten()
+                print(f"G vector norm: {np.linalg.norm(g_vector)}")
+                g_v = np.matrix(g_vector).transpose()
+                d_delta_vector = np.array((np.linalg.inv(hessian) @ g_v)).flatten()
                 delta_vector  -= d_delta_vector
                 delta_sig, delta_beta, delta_theta, delta_gam = self.divide_delta_vector(delta_vector)
+                print(f"Delta sig: {delta_sig}")
+                print(f"Delta beta: {delta_beta}")
+                print(f"Delta theta: {delta_theta}")
+                print(f"Delta gamma: {delta_gam}")
                 g_vector, n_i = self.calc_g_vector(sig_d_tri, sig_d, delta_sig, delta_beta, delta_theta, delta_gam)
+                print(f"G vector: {g_vector}")
                 hessian = self.calc_hessian(sig_d_tri, delta_sig, delta_beta, delta_theta, delta_gam)
                 if np.linalg.norm(g_vector) < self.TOL:
                     print(delta_gam)

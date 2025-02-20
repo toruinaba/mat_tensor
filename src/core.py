@@ -5,7 +5,7 @@ from src.material import Material_expression_base
 
 class Calculator3D:
     TOL = 1.0e-06
-    NW_I = 100
+    NW_I = 10
 
     def __init__(self, material: Material_expression_base, goal_sig: np.ndarray, step: int):
         self.material = material
