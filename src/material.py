@@ -753,39 +753,37 @@ class Yoshida_uemori:
         g_eta, n_s = self.calc_g(eta)
         return g_eta - self.sig_y
 
-    def calc_f_f_dsig(self, eta):
+    def calc_j_f_f(self, eta):
         g_eta, n_s = self.calc_g(eta)
-        return n_s
-
-    def calc_f_f_dbeta(self, eta):
-        g_eta, n_s = self.calc_g(eta)
-        return - n_s
-
-    def calc_f_f_dtheta(self, eta):
-        g_eta, n_s = self.calc_g(eta)
-        return - n_s
+        f_f_dsig = n_s
+        f_f_dbeta = - n_s
+        f_f_dtheta = - n_s
+        f_f_dgamma = [0.0]
+        return np.hstack(f_f_dsig, f_f_dbeta, f_f_dtheta, f_f_dgamma)
 
     def calc_f_ep(self, sig, sig_tri, n_s, delta_gam):
         return (self.elastic.De_inv @ (sig - sig_tri)) + delta_gam * n_s
 
-    def calc_f_ep_dsig(self, g, n_s, delta_gam):
-        dn_dsig = 3 /(2 * g) * (I - np.outer(n_s / np.sqrt(3 / 2), n_s / np.sqrt(3 / 2)))
-        return self.elastic.De_inv + delta_gam * dn_dsig
+    def calc_j_f_ep(self, eta, delta_gam):
+        g_eta, n_s = self.calc_g(eta)
+        dn_dsig = 3 /(2 * g_eta) * (I - np.outer(n_s / np.sqrt(3 / 2), n_s / np.sqrt(3 / 2)))
+        f_ep_dsig = self.elastic.De_inv + delta_gam * dn_dsig
+        f_ep_dbeta = - delta_gam * dn_dsig
+        f_ep_dtheta = - delta_gam * dn_dsig
+        f_ep_dgamma = n_s
+        matrices = (f_ep_dsig, f_ep_dbeta, f_ep_dtheta, np.matrix(f_ep_dgamma).transpose())
+        return np.hstack(matrices)
 
-    def calc_f_ep_dbeta(self, g, n_s, delta_gam):
-        dn_dsig = 3 /(2 * g) * (I - np.outer(n_s / np.sqrt(3 / 2), n_s / np.sqrt(3 / 2)))
-        return - delta_gam * dn_dsig
+    def calc_f_beta(self, eta, delta_beta, delta_gam):
+        return delta_beta - (self.k * self.b / self.sig_y * eta - self.k * (self.beta + delta_beta)) * delta_gam
 
-    def calc_f_ep_dtheta(self, g, n_s, delta_gam):
-        dn_dsig = 3 /(2 * g) * (I - np.outer(n_s / np.sqrt(3 / 2), n_s / np.sqrt(3 / 2)))
-        return - delta_gam * dn_dsig
-
-    def calc_f_ep_ddelgam(self, n_s):
-        return n_s
-
-    def calc_f_beta(self, beta, n_s, delta_gam):
-        th = 1 / (1 + delta_gam * self.k)
-        return beta - th * (self.beta + 2 / 3 * self.k * self.b * delta_gam * n_s)
+    def calc_j_f_beta(self, eta, delta_beta, delta_gam):
+        f_beta_dsig = - self.k * self.b * delta_gam / self.sig_y * I
+        f_beta_dbeta = (1.0 + self.k * self.b / self.sig_y * delta_gam + self.k * delta_gam) * I
+        f_beta_dtheta = self.k * self.b * delta_gam / self.sig_y * I
+        f_beta_dgamma = - self.k * self.b / self.sig_y * eta + self.k * (self.beta + delta_beta)
+        matrices = (f_beta_dsig, f_beta_dbeta, f_beta_dtheta, np.matrix(f_beta_dgamma).transpose())
+        return np.hstack(matrices)
 
     def calc_f_theta(self, theta, a, delta_gam, n_s):
         theta_bar = np.sqrt(3 / 2) * self.calc_stress_norm(theta)
