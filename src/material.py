@@ -744,175 +744,56 @@ class Yoshida_uemori:
         self.theta = self.theta_i
         self.R = self.R_i
 
-    def calc_i(self, sig_d, delta_beta, delta_theta):
-        theta_i = self.theta + delta_theta
-        beta_i = self.beta + delta_beta
-        eta = sig_d - theta_i - beta_i
-        norm = self.calc_stress_norm(eta)
-        return np.sqrt(3 / 2) * norm, eta / norm * np.sqrt(3 / 2)
-
-    def calc_f(self, sig_d_tri, delta_beta, delta_theta, delta_gam, n_i):
-        sig_d = sig_d_tri - 2 * self.elastic.G * delta_gam * n_i
-        theta_i = self.theta + delta_theta
-        beta_i = self.beta + delta_beta
-        eta = sig_d - theta_i - beta_i
-        norm = self.calc_stress_norm(eta)
-        return np.sqrt(3 / 2) * norm - self.sig_y
-
     def calc_g(self, sig_d):
         norm = self.calc_stress_norm(sig_d)
-        if norm == 0.0:
-            return 0.0, np.zeros(6)
-        return np.sqrt(3 / 2) * norm, np.sqrt(3 / 2) * sig_d / norm
+        n_bar = sig_d / norm
+        return np.sqrt(3 / 2) * norm, np.sqrt(3 / 2) * n_bar
 
-    def divide_delta_vector(self, vector):
-        split_id = (6, 12, 18)
-        return np.split(vector, split_id)
+    def calc_f_f(self, eta):
+        g_eta, n_s = self.calc_g(eta)
+        return g_eta - self.sig_y
 
-    def calc_hessian(self, sig_d, delta_sig, delta_beta, delta_theta, delta_gam):
-        sig_i = sig_d + delta_sig
-        beta_i = self.beta + delta_beta
-        theta_i = self.theta + delta_theta
-        eta_i = sig_i - beta_i - theta_i
-        g_eta_i, n_i = self.calc_g(eta_i)
-        th = 1.0 / (1.0 + self.k * delta_gam)
-        R_i = self.R * th + self.k * self.Rsat * delta_gam * th
-        h_i = self.k * (self.Rsat - R_i)
-        a_i = self.B + R_i - self.sig_y
-        mat_g1 = self.calc_mat_g1(n_i)
-        mat_g2 = self.calc_mat_g2(n_i, delta_gam)
-        mat_g3 = self.calc_mat_g3(theta_i, eta_i, h_i, a_i, delta_gam)
-        mat_g4 = self.calc_mat_g4(beta_i, eta_i, delta_gam)
-        return np.vstack((mat_g1, mat_g2, mat_g3, mat_g4))
+    def calc_f_f_dsig(self, eta):
+        g_eta, n_s = self.calc_g(eta)
+        return n_s
 
-    def calc_g_vector(self, sig_d_tri, sig_d, del_s, del_b, del_th, del_gam):
-        sig_i = sig_d + del_s
-        beta_i = self.beta + del_b
-        theta_i = self.theta + del_th
-        eta_i = sig_i - beta_i - theta_i
-        g_sig_i, n_i = self.calc_g(eta_i)
-        sig_i_d_tri = sig_d_tri - 2 * del_gam * self.elastic.G * n_i
-        f_i = self.calc_f(sig_i_d_tri, del_b, del_th, del_gam, n_i)
-        theta_bar, n_theta = self.calc_g(theta_i)
-        th = 1.0 / (1.0 + self.k * del_gam)
-        R_i = self.R * th + self.k * self.Rsat * del_gam * th
-        a_i = self.B + R_i - self.sig_y
-        g1 = g_sig_i - self.sig_y - f_i
-        g2 = self.elastic.De_inv @ (sig_i - sig_i_d_tri) + del_gam * n_i
-        if theta_bar == 0.0:
-            g3 = del_th
-        else:
-            g3 = del_th - (a_i * self.C * del_gam / self.sig_y) * eta_i + self.C * del_gam * np.sqrt(a_i / theta_bar) * theta_i
-        g4 = del_b - (self.k * self.b * del_gam / self.sig_y) + del_gam * self.k * beta_i
-        vectors = ([g1], g2, g3, g4)
-        return np.concat(vectors), n_i
-    
-    def calc_mat_g1(self, n_i):
-        return np.matrix(np.concat((n_i, -n_i, -n_i, [0.0])))
-    
-    def calc_mat_g2(self, n_i, delta_gam):
-        dn_dsig = Id - np.outer(n_i, n_i)
-        sig_term = self.elastic.De_inv + dn_dsig * delta_gam
-        beta_term = - delta_gam * dn_dsig
-        theta_term = - delta_gam * dn_dsig
-        matrices = (np.matrix(sig_term), np.matrix(beta_term), np.matrix(theta_term), np.matrix(n_i).transpose())
-        return np.hstack(matrices)
+    def calc_f_f_dbeta(self, eta):
+        g_eta, n_s = self.calc_g(eta)
+        return - n_s
 
-    def calc_mat_g3(self, theta, eta, h, a, delta_gam):
-        theta_bar, n_theta = self.calc_g(theta)
-        if theta_bar == 0.0:
-            dg3_dtheta = 1.0 + a * self.C * delta_gam / self.sig_y 
-            dg3_dd_gam = - (a * self.C / self.sig_y +  h * self.C * delta_gam / self.sig_y) * eta
-        else:
-            dg3_dtheta = 1.0 + a * self.C * delta_gam / self.sig_y + self.C * delta_gam * np.sqrt(a / theta_bar) - self.C * delta_gam * np.sqrt(a) / (2 * np.sqrt(theta_bar)) * np.sqrt(3 / 2)
-            dg3_dd_gam = - (a * self.C / self.sig_y +  h * self.C * delta_gam / self.sig_y) * eta + (self.C * np.sqrt(a / theta_bar) + h * self.C * delta_gam / (2 * np.sqrt(a * theta_bar))) * theta
-        sig_term = -a * self.C * delta_gam / self.sig_y * I
-        beta_term = a * self.C * delta_gam / self.sig_y * I
-        theta_term = dg3_dtheta * I
-        matrices = (np.matrix(sig_term), np.matrix(beta_term), np.matrix(theta_term), np.matrix(dg3_dd_gam).transpose())
-        return np.hstack(matrices)
+    def calc_f_f_dtheta(self, eta):
+        g_eta, n_s = self.calc_g(eta)
+        return - n_s
 
-    def calc_mat_g4(self, beta, eta, delta_gam):
-        sig_term = - self.k * self.b * delta_gam / self.sig_y * I
-        beta_term = (1.0 + self.k * self.b * delta_gam / self.sig_y + self.k * delta_gam) * I
-        theta_term = self.k * self.b * delta_gam / self.sig_y * I
-        del_gam_term = self.k * delta_gam / self.sig_y * eta + self.k * beta
-        matrices = (np.matrix(sig_term), np.matrix(beta_term), np.matrix(theta_term), np.matrix(del_gam_term).transpose())
-        return np.hstack(matrices)
+    def calc_f_ep(self, sig, sig_tri, n_s, delta_gam):
+        return (self.elastic.De_inv @ (sig - sig_tri)) + delta_gam * n_s
 
-    def calc_Dep(self, sig_d, delta_sig, delta_beta, delta_theta, delta_gam):
-        if delta_gam == 0.0:
-            return self.elastic.De
-        sig_i = sig_d + delta_sig
-        beta_i = self.beta + delta_beta
-        theta_i = self.theta + delta_theta
-        theta_bar, n_theta = self.calc_g(theta_i)
-        eta_i = sig_i - beta_i - theta_i
-        g_eta_i, n_i = self.calc_g(eta_i)
-        th = 1.0 / (1.0 + self.k * delta_gam)
-        R_i = self.R * th + self.k * self.Rsat * delta_gam * th
-        h_i = self.k * (self.Rsat - R_i)
-        a_i = self.B + R_i - self.sig_y
-        n_v = a_i * self.C / self.sig_y * eta_i - self.C * np.sqrt(a_i / theta_bar) * theta_i + self.k * self.b / self.sig_y * eta_i - self.k * beta_i
-        dn_dsig = Id - np.outer(n_i, n_i)
-        n_inc = dn_dsig @ n_v
-        TH = self.elastic.De_inv + delta_gam * dn_dsig
-        TH_inv = np.linalg.inv(TH)
-        vector1 = TH_inv @ (n_i - delta_gam * n_inc)
-        vector2 = TH_inv @ n_i
-        factor = n_i @ vector1 + n_i @ n_v
-        operator = TH_inv - np.outer(vector1, vector2) / factor
-        return operator
+    def calc_f_ep_dsig(self, g, n_s, delta_gam):
+        dn_dsig = 3 /(2 * g) * (I - np.outer(n_s / np.sqrt(3 / 2), n_s / np.sqrt(3 / 2)))
+        return self.elastic.De_inv + delta_gam * dn_dsig
 
-    def return_mapping(self, sig_d_tri, sig_d):
-        delta_vector = np.zeros(19)
-        print("-"*80)
-        delta_sig, delta_beta, delta_theta, delta_gam = self.divide_delta_vector(delta_vector)
-        g_sig_i, n_i = self.calc_i(sig_d_tri + delta_sig, delta_beta, delta_theta)
-        if g_sig_i - self.sig_y > 0.0:
-            print("Plastic behavior")
-            hessian = self.calc_hessian(sig_d, delta_sig, delta_beta, delta_theta, delta_gam)
-            g_vector, n_i = self.calc_g_vector(sig_d_tri, sig_d, delta_sig, delta_beta, delta_theta, delta_gam)
-            for inew in range(self.RM_I):
-                print(f"Newton iteration {inew+1}")
-                print(f"G vector norm: {np.linalg.norm(g_vector)}")
-                g_v = np.matrix(g_vector).transpose()
-                d_delta_vector = np.array((np.linalg.inv(hessian) @ g_v)).flatten()
-                delta_vector  -= d_delta_vector
-                delta_sig, delta_beta, delta_theta, delta_gam = self.divide_delta_vector(delta_vector)
-                print(f"Delta sig: {delta_sig}")
-                print(f"Delta beta: {delta_beta}")
-                print(f"Delta theta: {delta_theta}")
-                print(f"Delta gamma: {delta_gam}")
-                g_vector, n_i = self.calc_g_vector(sig_d_tri, sig_d, delta_sig, delta_beta, delta_theta, delta_gam)
-                print(f"G vector: {g_vector}")
-                hessian = self.calc_hessian(sig_d_tri, delta_sig, delta_beta, delta_theta, delta_gam)
-                if np.linalg.norm(g_vector) < self.TOL:
-                    print(delta_gam)
-                    if delta_gam < -self.TOL:
-                        raise ValueError("Delta gamma is negative value.")
-                    print(f"Return map converged itr.{inew+1}")
-                    print(f"Delta gamma: {delta_gam}")
-                    break
-                if inew == self.RM_I - 1:
-                    raise ValueError("Return map isn't converged")
-        else:
-            print("Elastic behavior")
-        return delta_vector, n_i
+    def calc_f_ep_dbeta(self, g, n_s, delta_gam):
+        dn_dsig = 3 /(2 * g) * (I - np.outer(n_s / np.sqrt(3 / 2), n_s / np.sqrt(3 / 2)))
+        return - delta_gam * dn_dsig
 
-    def integrate_stress(self, eps, del_eps):
-        sig_i = self.elastic.De @ (eps - self.eps_p)
-        sig_d_i = Id @ sig_i
-        eps_tri = eps + del_eps
-        eps_e_tri = eps_tri - self.eps_p
-        sig_tri = self.elastic.De @ eps_e_tri
-        sig_d_tri = Id_s @ sig_tri
-        delta_vector, n_i = self.return_mapping(sig_d_tri, sig_d_i)
-        delta_sig, delta_beta, delta_theta, delta_gam = self.divide_delta_vector(delta_vector)
-        Dep = self.calc_Dep(sig_d_i, delta_sig, delta_beta, delta_theta, delta_gam)
-        self.update_i(delta_beta, delta_theta, delta_gam, n_i)
-        if delta_gam == 0.0:
-            sig = sig_tri
-            return sig, Dep
-        sig = sig_i + delta_sig
-        return sig, Dep
+    def calc_f_ep_dtheta(self, g, n_s, delta_gam):
+        dn_dsig = 3 /(2 * g) * (I - np.outer(n_s / np.sqrt(3 / 2), n_s / np.sqrt(3 / 2)))
+        return - delta_gam * dn_dsig
+
+    def calc_f_ep_ddelgam(self, n_s):
+        return n_s
+
+    def calc_f_beta(self, beta, n_s, delta_gam):
+        th = 1 / (1 + delta_gam * self.k)
+        return beta - th * (self.beta + 2 / 3 * self.k * self.b * delta_gam * n_s)
+
+    def calc_f_theta(self, theta, a, delta_gam, n_s):
+        theta_bar = np.sqrt(3 / 2) * self.calc_stress_norm(theta)
+        return theta - self.theta - np.sqrt(2 / 3) * self.C * delta_gam * (a * n_s - np.sqrt(a / theta_bar) * theta)
+
+    def calc_f_vector(self, sig, sig_tri, beta, theta, delta_gam, n_s):
+        eta = Id_s @ sig - beta - theta
+        f_f = self.calc_f_f(eta)
+        f_ep = self.calc_f_ep(sig, sig_tri, n_s, delta_gam)
+        f_beta = self.calc_f_beta(beta, n_s, delta_gam)
+        f_theta = self.calc_f_theta(theta, a, delta_gam) 

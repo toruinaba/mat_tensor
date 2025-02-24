@@ -1,6 +1,6 @@
 import numpy as np
-from src.material import Elastic, Linear_isotropic, AF_kinematic, Chaboche_n
-from src.util import Id_s
+from src.material import Elastic, Linear_isotropic, AF_kinematic, Chaboche_n, Yoshida_uemori
+from src.util import Id_s, Id
 
 NTENS = 3
 E = 205000.0
@@ -195,3 +195,213 @@ class Test_chaboche_n:
         Dep_act = self.MAT.calc_Dep(q_tri, del_gam, n_bar)
         # assert
         assert np.allclose(Dep_act, Dep_expect, atol=1.0e-6)
+
+
+class Test_yoshida_uemori:
+    YU = Yoshida_uemori(Elastic(205000.0, 0.3), 200.0, 160.0, 500.0, 120.0, 20.0, 10.0, 0.5)
+
+    def test_De(self):
+        h = 1.0e-32
+        eps = np.array([0.1, 0.1, 0.1, 0.1, 0.1, 0.1])
+        acted = self.YU.elastic.De
+        vectors = []
+        for i in range(6):
+            add_complex_v = np.zeros(6, dtype=complex)
+            add_complex_v[i] += h * 1.0j
+            eps_comp = eps + add_complex_v
+            sig_comp = self.YU.elastic.De @ eps_comp
+            exp_n = np.imag(sig_comp) / h
+            vectors.append(exp_n)
+        expected = np.vstack(vectors)
+        assert np.allclose(acted, expected)
+
+    def test_De_inv(self):
+        h = 1.0e-32
+        sig = np.array([0.1, 0.1, 0.1, 0.1, 0.1, 0.1])
+        acted = self.YU.elastic.De_inv
+        vectors = []
+        for i in range(6):
+            add_complex_v = np.zeros(6, dtype=complex)
+            add_complex_v[i] += h * 1.0j
+            sig_comp = sig + add_complex_v
+            eps_comp = self.YU.elastic.De_inv @ sig_comp
+            v_n = np.imag(eps_comp) / h
+            vectors.append(v_n)
+        expected = np.vstack(vectors)
+        assert np.allclose(acted, expected)
+    
+    def test_norm(self):
+        h = 1.0e-32
+        sig = np.array([10, 20, 30, 40, 50, 60])
+        fro_norm = np.sqrt((np.diag([1, 1, 1, 2, 2, 2]) @ sig) @ sig)
+        acted = sig / fro_norm
+        expected = np.zeros(6)
+        for i in range(6):
+            add_complex_v = np.zeros(6, dtype=complex)
+            add_complex_v[i] += h * 1.0j
+            sig_comp = sig + add_complex_v
+            v_comp = np.sqrt((np.diag([1, 1, 1, 2, 2, 2]) @ sig_comp) @ sig_comp)
+            expected[i] = v_comp.imag / h
+        assert np.allclose(acted, expected)
+        
+
+    def test_f_f_dsig(self):
+        # arrange
+        h = 1.0e-32
+        sig = np.array([100.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        beta = np.array([0.0, 0.0, 0.0, 20.0, 30.0, 50.0])
+        theta = np.array([-5, 10, -5, 10.0, 5.0, 10.0])
+        sig_d = Id_s @ sig
+        eta = sig_d - beta - theta
+        f_f_dsig_expected = np.zeros(6)
+        for i in range(6):
+            add_complex_v = np.zeros(6, dtype=complex)
+            add_complex_v[i] += h * 1.0j
+            sig_d_comp = sig_d + add_complex_v * np.array([1.0, 1.0, 1.0, 1.0, 1.0, 1.0])
+            eta_d_comp = sig_d_comp - beta - theta
+            f_f_i = self.YU.calc_f_f(eta_d_comp)
+            i_v = f_f_i.imag / h
+            f_f_dsig_expected[i] = i_v
+
+        # act
+        f_f_dsig_acted = self.YU.calc_f_f_dsig(eta)
+        
+        # assert
+        assert np.allclose(f_f_dsig_expected, f_f_dsig_acted)
+
+    def test_f_f_dbeta(self):
+         # arrange
+        h = 1.0e-32
+        sig = np.array([100.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        beta = np.array([0.0, 0.0, 0.0, 20.0, 0.0, 0.0])
+        theta = np.array([-5, 10, -5, 0.0, 0.0, 0.0])
+        sig_d = Id_s @ sig
+        eta = sig_d - beta - theta
+        f_f_dbeta_expected = np.zeros(6)
+        for i in range(6):
+            add_complex_v = np.zeros(6, dtype=complex)
+            add_complex_v[i] += h * 1.0j
+            beta_comp = beta + add_complex_v * np.array([1.0, 1.0, 1.0, 0.5, 0.5, 0.5])
+            eta_d_comp = sig_d - beta_comp - theta
+            f_f_i = self.YU.calc_f_f(eta_d_comp)
+            i_v = f_f_i.imag / h
+            f_f_dbeta_expected[i] = i_v
+
+        # act
+        f_f_dbeta_acted = self.YU.calc_f_f_dbeta(eta)
+        
+        # assert
+        assert np.allclose(f_f_dbeta_expected, f_f_dbeta_acted)
+
+
+    def test_f_f_dtheta(self):
+         # arrange
+        h = 1.0e-32
+        sig = np.array([100.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        beta = np.array([0.0, 0.0, 0.0, 20.0, 0.0, 0.0])
+        theta = np.array([-5, 10, -5, 0.0, 0.0, 0.0])
+        sig_d = Id_s @ sig
+        eta = sig_d - beta - theta
+        f_f_dbeta_expected = np.zeros(6)
+        for i in range(6):
+            add_complex_v = np.zeros(6, dtype=complex)
+            add_complex_v[i] += h * 1.0j
+            theta_comp = theta + add_complex_v * np.array([1.0, 1.0, 1.0, 0.5, 0.5, 0.5])
+            eta_d_comp = sig_d - beta - theta_comp
+            f_f_i = self.YU.calc_f_f(eta_d_comp)
+            i_v = f_f_i.imag / h
+            f_f_dbeta_expected[i] = i_v
+
+        # act
+        f_f_dbeta_acted = self.YU.calc_f_f_dtheta(eta)
+        
+        # assert
+        assert np.allclose(f_f_dbeta_expected, f_f_dbeta_acted)
+
+    def test_f_ep_dsig(self):
+         # arrange
+        h = 1.0e-32
+        sig = np.array([100.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        delta_gam = 1.5e-5
+        sig_tri = sig + self.YU.elastic.De @ (np.array([1.0, -0.5, -0.5, 0.0, 0.0, 0.0]) * delta_gam)
+        beta = np.array([6.0, 6.0, -12.0, 0.0, 0.0, 0.0])
+        theta = np.array([-5, 10, -5, 0.0, 0.0, 0.0])
+        sig_d = Id_s @ sig
+        sig_d_tri = Id_s @ sig_tri
+        eta = sig_d - beta - theta
+        g, n_s = self.YU.calc_g(eta)
+        vectors = []
+        for i in range(6):
+            add_complex_v = np.zeros(6, dtype=complex)
+            add_complex_v[i] += h * 1.0j
+            sig_d_comp = sig_d + add_complex_v * np.array([1.0, 1.0, 1.0, 0.5, 0.5, 0.5])
+            eta_comp = sig_d_comp - beta - theta
+            g_comp, n_s_comp = self.YU.calc_g(eta_comp)
+            f_ep_dsig_comp = np.imag(self.YU.calc_f_ep(sig_d_comp, sig_d_tri, n_s_comp, delta_gam)) / h
+            vectors.append(f_ep_dsig_comp)
+        f_ep_dsig_expected = np.vstack(vectors)
+
+        # act
+        f_ep_dsig_acted = self.YU.calc_f_ep_dsig(g, n_s, delta_gam)
+
+        # assert
+        assert np.allclose(f_ep_dsig_acted, f_ep_dsig_expected)
+
+    def test_f_ep_dbeta(self):
+         # arrange
+        h = 1.0e-32
+        sig = np.array([100.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        delta_gam = 1.5e-5
+        sig_tri = sig + self.YU.elastic.De @ (np.array([1.0, -0.5, -0.5, 0.0, 0.0, 0.0]) * delta_gam)
+        beta = np.array([0.0, 0.0, 0.0, 10.0, 0.0, 0.0])
+        theta = np.array([-5, 10, -5, 0.0, 0.0, 0.0])
+        sig_d = Id_s @ sig
+        sig_d_tri = Id_s @ sig_tri
+        eta = sig_d - beta - theta
+        g, n_s = self.YU.calc_g(eta)
+        vectors = []
+        for i in range(6):
+            add_complex_v = np.zeros(6, dtype=complex)
+            add_complex_v[i] += h * 1.0j
+            beta_comp = beta + add_complex_v * np.array([1.0, 1.0, 1.0, 0.5, 0.5, 0.5])
+            eta_comp = sig_d - beta_comp - theta
+            g_comp, n_s_comp = self.YU.calc_g(eta_comp)
+            f_ep_dbeta_comp = np.imag(self.YU.calc_f_ep(sig_d, sig_d_tri, n_s_comp, delta_gam)) / h
+            vectors.append(f_ep_dbeta_comp)
+        f_ep_dbeta_expected = np.vstack(vectors)
+
+        # act
+        f_ep_dbeta_acted = self.YU.calc_f_ep_dbeta(g, n_s, delta_gam)
+
+        # assert
+        assert np.allclose(f_ep_dbeta_acted, f_ep_dbeta_expected)
+
+    def test_f_ep_dtheta(self):
+        # arrange
+        h = 1.0e-32
+        sig = np.array([100.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        delta_gam = 1.0e-5
+        sig_tri = sig + self.YU.elastic.De @ (np.array([1.0, -0.5, -0.5, 0.0, 0.0, 0.0]) * delta_gam)
+        beta = np.array([0.0, 0.0, 0.0, 30.0, 30.0, 30.0])
+        theta = np.array([-5, 10, -5, 0.0, 0.0, 0.0])
+        sig_d = Id_s @ sig
+        sig_d_tri = Id_s @ sig_tri
+        eta = sig_d - beta - theta
+        g, n_s = self.YU.calc_g(eta)
+        vectors = []
+        for i in range(6):
+            add_complex_v = np.zeros(6, dtype=complex)
+            add_complex_v[i] += h * 1.0j
+            theta_comp = theta + add_complex_v * np.array([1.0, 1.0, 1.0, 1.0, 1.0, 1.0])
+            eta_comp = sig_d - beta - theta_comp
+            g_comp, n_s_comp = self.YU.calc_g(eta_comp)
+            f_ep_dsig_comp = np.imag(self.YU.calc_f_ep(sig_d, sig_d_tri, n_s_comp, delta_gam)) / h
+            vectors.append(f_ep_dsig_comp)
+        f_ep_dsig_expected = np.vstack(vectors)
+
+        # act
+        f_ep_dsig_acted = self.YU.calc_f_ep_dtheta(g, n_s, delta_gam)
+
+        # assert
+        print(f_ep_dsig_acted / f_ep_dsig_expected)
+        assert np.allclose(f_ep
