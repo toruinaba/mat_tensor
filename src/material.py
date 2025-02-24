@@ -785,9 +785,16 @@ class Yoshida_uemori:
         matrices = (f_beta_dsig, f_beta_dbeta, f_beta_dtheta, np.matrix(f_beta_dgamma).transpose())
         return np.hstack(matrices)
 
-    def calc_f_theta(self, theta, a, delta_gam, n_s):
+    def calc_f_theta(self, eta, theta, a, delta_gam, n_s):
         theta_bar = np.sqrt(3 / 2) * self.calc_stress_norm(theta)
-        return theta - self.theta - np.sqrt(2 / 3) * self.C * delta_gam * (a * n_s - np.sqrt(a / theta_bar) * theta)
+        return theta - self.theta - a * self.C * delta_gam / self.sig_y * eta + self.C * delta_gam * np.sqrt(a / theta_bar) * theta
+
+    def calc_f_theta_dsig(self, a, delta_gam):
+        return - a * self.C * delta_gam / self.sig_y * I
+
+    def calc_f_theta_dbeta(self, a, delta_gam):
+        return a * self.C * delta_gam / self.sig_y * I
+
 
     def calc_f_vector(self, sig, sig_tri, beta, theta, delta_gam, n_s):
         eta = Id_s @ sig - beta - theta
