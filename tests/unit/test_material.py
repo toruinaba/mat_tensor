@@ -583,3 +583,64 @@ class Test_yoshida_uemori:
 
         # assert
         assert np.allclose(acted, expected)
+
+    def test_f_theta_dtheta(self):
+        # arrange
+        h = 1.0e-32
+        sig = np.array([100.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        delta_gam = 1.5e-5
+        sig_tri = sig + self.YU.elastic.De @ (np.array([1.0, -0.5, -0.5, 0.0, 0.0, 0.0]) * delta_gam)
+        self.YU.beta = np.array([0.0, 0.0, 0.0, 30.0, 30.0, 30.0])
+        self.YU.theta = np.array([-5, 10, -5, 0.0, 0.0, 0.0])
+        delta_theta = np.array([0.0, 0.0, 0.0, 0.1, 0.2, 0.3])
+        R_i = 10.0
+        sig_d = Id_s @ sig
+        sig_d_tri = Id_s @ sig_tri
+        eta = sig_d - self.YU.beta - (self.YU.theta + delta_theta)
+        g, n_s = self.YU.calc_g(eta)
+        R = 1 / (1 + delta_gam * self.YU.k) * (R_i + self.YU.k * self.YU.Rsat * delta_gam)
+        a = self.YU.B + R - self.YU.sig_y
+        vectors = []
+        for i in range(6):
+            add_complex_v = np.zeros(6, dtype=complex)
+            add_complex_v[i] += h * 1.0j
+            theta_comp = self.YU.theta + delta_theta + add_complex_v * np.array([1.0, 1.0, 1.0, 1.0, 1.0, 1.0])
+            eta_comp = sig_d - self.YU.beta - theta_comp
+            g_comp, n_s_comp = self.YU.calc_g(eta_comp)
+            v = np.imag(self.YU.calc_f_theta(eta_comp, theta_comp, a, delta_gam, n_s_comp)) / h
+            vectors.append(v)
+        expected = np.vstack(vectors)
+
+        # act
+        acted = self.YU.calc_f_theta_dtheta(self.YU.theta + delta_theta, a, delta_gam)
+
+        # assert
+        assert np.allclose(acted, expected)
+
+    def test_f_theta_dgamma(self):
+        # arrange
+        # arrange
+        h = 1.0e-32
+        sig = np.array([100.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        delta_gam = 1.5e-5
+        sig_tri = sig + self.YU.elastic.De @ (np.array([1.0, -0.5, -0.5, 0.0, 0.0, 0.0]) * delta_gam)
+        self.YU.beta = np.array([0.0, 0.0, 0.0, 30.0, 30.0, 30.0])
+        self.YU.theta = np.array([-5, 10, -5, 0.0, 0.0, 0.0])
+        delta_theta = np.array([0.0, 0.0, 0.0, 0.1, 0.2, 0.3])
+        self.YU.R = 10.0
+        sig_d = Id_s @ sig
+        sig_d_tri = Id_s @ sig_tri
+        eta = sig_d - self.YU.beta - (self.YU.theta + delta_theta)
+        g, n_s = self.YU.calc_g(eta)
+        delta_gam_comp = delta_gam + h * 1.0j
+        R = 1 / (1 + delta_gam * self.YU.k) * (self.YU.R + self.YU.k * self.YU.Rsat * delta_gam)
+        R_comp = 1 / (1 + delta_gam_comp * self.YU.k) * (self.YU.R + self.YU.k * self.YU.Rsat * delta_gam_comp)
+        a = self.YU.B + R - self.YU.sig_y
+        a_comp = self.YU.B + R_comp - self.YU.sig_y
+        expected = np.imag(self.YU.calc_f_theta(eta, self.YU.theta + delta_theta, a_comp, delta_gam_comp, n_s)) / h
+        
+        # act
+        acted = self.YU.calc_f_theta_dgamma(eta, self.YU.theta + delta_theta, a, delta_gam)
+
+        # assert
+        assert np.allclose(acted, expected)

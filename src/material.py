@@ -789,12 +789,26 @@ class Yoshida_uemori:
         theta_bar = np.sqrt(3 / 2) * self.calc_stress_norm(theta)
         return theta - self.theta - a * self.C * delta_gam / self.sig_y * eta + self.C * delta_gam * np.sqrt(a / theta_bar) * theta
 
-    def calc_f_theta_dsig(self, a, delta_gam):
-        return - a * self.C * delta_gam / self.sig_y * I
-
-    def calc_f_theta_dbeta(self, a, delta_gam):
-        return a * self.C * delta_gam / self.sig_y * I
-
+    def calc_j_f_theta(self, eta, theta, a, delta_gam):
+        theta_bar = np.sqrt(3 / 2) * self.calc_stress_norm(theta)
+        n_bar_theta = theta / (theta_bar / np.sqrt(3 / 2))
+        s = 1 / (1 + self.k * delta_gam)
+        a_prime = - self.k * s**2 * (self.R + self.k * self.Rsat * delta_gam) + s * self.k * self.Rsat
+        f_theta_dsig = - a * self.C * delta_gam / self.sig_y * I
+        f_theta_dbeta = a * self.C * delta_gam / self.sig_y * I
+        f_theta_dtheta =  (
+            1 + a * self.C * delta_gam / self.sig_y +
+            self.C * delta_gam * np.sqrt(a / theta_bar)) * I - (
+                np.sqrt(3 / 2) * self.C * delta_gam * np.sqrt(a) / (2 * theta_bar * np.sqrt(theta_bar)) * np.outer(n_bar_theta, theta)
+            )
+        f_theta_dgamma = (
+            - a * self.C / self.sig_y * eta -
+            self.C * delta_gam / self.sig_y * a_prime * eta +
+            self.C * np.sqrt(a / theta_bar) * theta +
+            self.C * delta_gam * np.sqrt(1 / theta_bar / a) * a_prime / 2 * theta
+        )
+        matrices = (f_theta_dsig, f_theta_dbeta, f_theta_dtheta, np.matrix(f_theta_dgamma).transpose())
+        return np.hstack(matrices)
 
     def calc_f_vector(self, sig, sig_tri, beta, theta, delta_gam, n_s):
         eta = Id_s @ sig - beta - theta
