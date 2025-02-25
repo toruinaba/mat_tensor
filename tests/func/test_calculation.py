@@ -57,15 +57,15 @@ class Test_calculator3D:
 
     def test_af_kinematic(self):
         af_kin = AF_kinematic(self.elastic, self.sig_y, self.C, self.k)
-        calculator = Calculator3D(af_kin, np.array([392.457, 0.0, 0.0, 0.0, 0.0, 0.0]), 1000)
+        calculator = Calculator3D(af_kin, np.array([0.0, 0.0, 0.0, 200.0, 0.0, 0.0]), 500)
         calculator.calculate_steps()
-        calculator.goal_sig = np.array([-399.48, 0.0, 0.0, 0.0, 0.0, 0.0])
+        calculator.goal_sig = np.array([0.0, 0.0, 0.0, -200.0, 0.0, 0.0])
         calculator.calculate_steps(is_init=False)
-        calculator.goal_sig = np.array([399.9, 0.0, 0.0, 0.0, 0.0, 0.0])
+        calculator.goal_sig = np.array([0.0, 0.0, 0.0, 200.0, 0.0, 0.0])
         calculator.calculate_steps(is_init=False)
 
-        x = [e[0] for e in calculator.output.eps_p]
-        y = [s[0] for s in calculator.output.sig]
+        x = [e[3] for e in calculator.output.eps_p]
+        y = [s[3] for s in calculator.output.sig]
 
         fig = plt.figure()
         plt.plot(x, y)

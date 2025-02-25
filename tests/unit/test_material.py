@@ -1,6 +1,6 @@
 import numpy as np
 from src.material import Elastic, Linear_isotropic, AF_kinematic, Chaboche_n, Yoshida_uemori
-from src.util import Id_s, Id
+from src.util import Id_s, Id, I
 
 NTENS = 3
 E = 205000.0
@@ -324,8 +324,8 @@ class Test_yoshida_uemori:
         sig = np.array([100.0, 0.0, 0.0, 0.0, 0.0, 0.0])
         delta_gam = 1.5e-5
         sig_tri = sig + self.YU.elastic.De @ (np.array([1.0, -0.5, -0.5, 0.0, 0.0, 0.0]) * delta_gam)
-        beta = np.array([6.0, 6.0, -12.0, 0.0, 0.0, 0.0])
-        theta = np.array([-5, 10, -5, 0.0, 0.0, 0.0])
+        beta = np.array([6.0, 6.0, -12.0, 6.0, 0.0, 0.0])
+        theta = np.array([-5, 10, -5, 0.0, 3.0, 0.0])
         sig_d = Id_s @ sig
         sig_d_tri = Id_s @ sig_tri
         eta = sig_d - beta - theta
@@ -337,15 +337,17 @@ class Test_yoshida_uemori:
             sig_d_comp = sig_d + add_complex_v * np.array([1.0, 1.0, 1.0, 0.5, 0.5, 0.5])
             eta_comp = sig_d_comp - beta - theta
             g_comp, n_s_comp = self.YU.calc_g(eta_comp)
-            f_ep_dsig_comp = np.imag(self.YU.calc_f_ep(sig_d_comp, sig_d_tri, n_s_comp, delta_gam)) / h
-            vectors.append(f_ep_dsig_comp)
-        f_ep_dsig_expected = np.vstack(vectors)
+            v = np.imag(self.YU.calc_f_ep(sig_d_comp, sig_d_tri, n_s_comp, delta_gam)) / h
+            vectors.append(v)
+        expected = np.vstack(vectors)
 
         # act
-        f_ep_dsig_acted = self.YU.calc_f_ep_dsig(g, n_s, delta_gam)
+        dn_dsig = 3 /(2 * g) * (I - np.outer(np.diag([1.0, 1.0, 1.0, 2.0, 2.0, 2.0]) @ n_s / np.sqrt(3 / 2), np.diag([1.0, 1.0, 1.0, 2.0, 2.0, 2.0]) @ n_s / np.sqrt(3 / 2)))
+        acted = self.YU.elastic.De_inv + delta_gam * dn_dsig
 
         # assert
-        assert np.allclose(f_ep_dsig_acted, f_ep_dsig_expected)
+        print(acted / expected)
+        assert np.allclose(acted, expected)
 
     def test_f_ep_dbeta(self):
          # arrange

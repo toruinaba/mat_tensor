@@ -1,3 +1,4 @@
+from copy import deepcopy
 import numpy as np
 from src.util import IxI, Id_s
 from src.material import Material_expression_base
@@ -5,7 +6,7 @@ from src.material import Material_expression_base
 
 class Calculator3D:
     TOL = 1.0e-06
-    NW_I = 3
+    NW_I = 100
 
     def __init__(self, material: Material_expression_base, goal_sig: np.ndarray, step: int):
         self.material = material
@@ -58,10 +59,12 @@ class Calculator3D:
     def calculate_steps(self, is_init=True):
         if is_init:
             self.initialize()
+        initial_sig = deepcopy(self.sig)
         for inc in range(self.step):
             print("="*80)
             print(f"Increment {inc}")
-            goal = (inc + 1) / self.step * self.goal_sig
+            goal = (inc + 1) / self.step * (self.goal_sig - initial_sig) + initial_sig
+            print(f"goal: {goal}")
             self.calc_increment(goal)
             self.output.add_data(self.sig, self.eps, self.material.eps_p, self.material.eff_eps_p)
 
