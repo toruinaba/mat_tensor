@@ -239,9 +239,31 @@ class Test_yoshida_uemori:
         for i in range(6):
             add_complex_v = np.zeros(6, dtype=complex)
             add_complex_v[i] += h * 1.0j
+            weight = np.array([1.0, 1.0, 1.0, 1.0, 1.0, 1.0])
             sig_comp = sig + add_complex_v
             v_comp = np.sqrt((np.diag([1, 1, 1, 2, 2, 2]) @ sig_comp) @ sig_comp)
             expected[i] = v_comp.imag / h
+        assert np.allclose(acted, expected)
+
+    def test_n_bar(self):
+        Q = np.diag([1.0, 1.0, 1.0, 2.0, 2.0, 2.0])
+        h = 1.0e-32
+        sig = np.array([1, 1, 1, 1, 1, 1])
+        fro_norm = np.sqrt((Q @ sig) @ sig)
+        n_bar = sig / fro_norm
+        acted = 1 / fro_norm * np.linalg.inv(Q) @ (I - np.outer(Q @ n_bar, n_bar))
+        vectors = []
+        for i in range(6):
+            add_complex_v = np.zeros(6, dtype=complex)
+            add_complex_v[i] += h * 1.0j
+            weight = np.array([1.0, 1.0, 1.0, 0.5, 0.5, 0.5])
+            sig_comp = sig + add_complex_v * weight
+            fro_norm_comp = np.sqrt((Q @ sig_comp) @ sig_comp)
+            v = np.imag(sig_comp / fro_norm_comp) / h
+            vectors.append(v)
+        expected = np.vstack(vectors)
+        print(acted)
+        print(expected)
         assert np.allclose(acted, expected)
         
 
@@ -590,7 +612,7 @@ class Test_yoshida_uemori:
         # arrange
         h = 1.0e-32
         sig = np.array([100.0, 0.0, 0.0, 0.0, 0.0, 0.0])
-        delta_gam = 1.5e-5
+        delta_gam = 1.5e-03
         sig_tri = sig + self.YU.elastic.De @ (np.array([1.0, -0.5, -0.5, 0.0, 0.0, 0.0]) * delta_gam)
         self.YU.beta = np.array([0.0, 0.0, 0.0, 30.0, 30.0, 30.0])
         self.YU.theta = np.array([-5, 10, -5, 0.0, 0.0, 0.0])
@@ -609,7 +631,7 @@ class Test_yoshida_uemori:
             theta_comp = self.YU.theta + delta_theta + add_complex_v * np.array([1.0, 1.0, 1.0, 1.0, 1.0, 1.0])
             eta_comp = sig_d - self.YU.beta - theta_comp
             g_comp, n_s_comp = self.YU.calc_g(eta_comp)
-            v = np.imag(self.YU.calc_f_theta(eta_comp, theta_comp, a, delta_gam, n_s_comp)) / h
+            v = np.imag(self.YU.calc_f_theta(eta_comp, theta_comp, a, delta_gam)) / h
             vectors.append(v)
         expected = np.vstack(vectors)
 
@@ -617,6 +639,7 @@ class Test_yoshida_uemori:
         acted = self.YU.calc_f_theta_dtheta(self.YU.theta + delta_theta, a, delta_gam)
 
         # assert
+        print(acted / expected)
         assert np.allclose(acted, expected)
 
     def test_f_theta_dgamma(self):
@@ -624,10 +647,10 @@ class Test_yoshida_uemori:
         # arrange
         h = 1.0e-32
         sig = np.array([100.0, 0.0, 0.0, 0.0, 0.0, 0.0])
-        delta_gam = 1.5e-5
+        delta_gam = 1.5e-05
         sig_tri = sig + self.YU.elastic.De @ (np.array([1.0, -0.5, -0.5, 0.0, 0.0, 0.0]) * delta_gam)
         self.YU.beta = np.array([0.0, 0.0, 0.0, 30.0, 30.0, 30.0])
-        self.YU.theta = np.array([-5, 10, -5, 0.0, 0.0, 0.0])
+        self.YU.theta = np.array([-50, 100, -50, 0.0, 0.0, 0.0])
         delta_theta = np.array([0.0, 0.0, 0.0, 0.1, 0.2, 0.3])
         self.YU.R = 10.0
         sig_d = Id_s @ sig
@@ -635,14 +658,16 @@ class Test_yoshida_uemori:
         eta = sig_d - self.YU.beta - (self.YU.theta + delta_theta)
         g, n_s = self.YU.calc_g(eta)
         delta_gam_comp = delta_gam + h * 1.0j
-        R = 1 / (1 + delta_gam * self.YU.k) * (self.YU.R + self.YU.k * self.YU.Rsat * delta_gam)
+        s = 1 / (1 + delta_gam * self.YU.k)
+        R = s * (self.YU.R + self.YU.k * self.YU.Rsat * delta_gam)
         R_comp = 1 / (1 + delta_gam_comp * self.YU.k) * (self.YU.R + self.YU.k * self.YU.Rsat * delta_gam_comp)
         a = self.YU.B + R - self.YU.sig_y
+        a_prime = - self.YU.k * s**2 * (R + self.YU.k * self.YU.Rsat * delta_gam) + s * self.YU.k * self.YU.Rsat
         a_comp = self.YU.B + R_comp - self.YU.sig_y
-        expected = np.imag(self.YU.calc_f_theta(eta, self.YU.theta + delta_theta, a_comp, delta_gam_comp, n_s)) / h
+        expected = np.imag(self.YU.calc_f_theta(eta, self.YU.theta + delta_theta, a_comp, delta_gam_comp)) / h
         
         # act
-        acted = self.YU.calc_f_theta_dgamma(eta, self.YU.theta + delta_theta, a, delta_gam)
+        acted = self.YU.calc_f_theta_dgamma(eta, self.YU.theta + delta_theta, a, a_prime, delta_gam)
 
         # assert
         assert np.allclose(acted, expected)

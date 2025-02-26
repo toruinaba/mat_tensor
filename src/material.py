@@ -672,6 +672,7 @@ class Chaboche_n(Material_expression_base):
 class Yoshida_uemori:
     TOL = 1.0e-06
     RM_I = 10
+    Q = np.diag([1.0, 1.0, 1.0, 2.0, 2.0, 2.0])
 
     def __init__(self, elastic: Elastic, sig_y: float, B, C, Rsat, k, b, h):
         self.elastic = elastic
@@ -731,10 +732,10 @@ class Yoshida_uemori:
         self.q_i = np.zeros(6)
 
 
-    def update_i(self, delta_beta, delta_theta, delta_gam, n_bar):
+    def update_i(self, delta_beta, delta_theta, delta_gam, n_flow):
         self.beta_i = self.beta + delta_beta
         self.theta_i = self.theta + delta_theta
-        self.eps_p_i = self.eps_p + np.sqrt(3 / 2) * delta_gam * np.diag([1.0, 1.0, 1.0, 2.0, 2.0, 2.0]) @ n_bar
+        self.eps_p_i = self.eps_p + delta_gam * n_flow
         self.eff_eps_p_i = self.eff_eps_p + delta_gam
         self.R_i = 1 / (1 + self.k * delta_gam) * (self.R + self.k * self.Rsat * delta_gam) 
 
@@ -750,44 +751,51 @@ class Yoshida_uemori:
         n_bar = sig_d / norm
         return np.sqrt(3 / 2) * norm, np.sqrt(3 / 2) * n_bar
 
+    def calc_g_flow(self, sig_d):
+        norm = self.calc_stress_norm(sig_d)
+        n_bar = sig_d / norm
+        return np.sqrt(3 / 2) * norm, np.sqrt(3 / 2) * self.Q @ n_bar
+
     def calc_f_f(self, eta):
         g_eta, n_s = self.calc_g(eta)
         return g_eta - self.sig_y
 
     def calc_j_f_f(self, eta):
-        g_eta, n_s = self.calc_g(eta)
-        f_f_dsig = n_s
-        f_f_dbeta = - n_s
-        f_f_dtheta = - n_s
+        g_eta, n_s_f = self.calc_g_flow(eta)
+        f_f_dsig = n_s_f
+        f_f_dbeta = - n_s_f
+        f_f_dtheta = - n_s_f
         f_f_dgamma = [0.0]
         vectors = (f_f_dsig, f_f_dbeta, f_f_dtheta, f_f_dgamma)
         return np.hstack(vectors)
 
-    def calc_f_ep(self, sig_d, sig_d_tri, n_s, delta_gam):
-        return (self.elastic.De_inv @ (sig_d - sig_d_tri)) + delta_gam * np.diag([1.0, 1.0, 1.0, 2.0, 2.0, 2.0]) @ n_s
+    def calc_f_ep(self, sig_d, sig_d_tri, eta, delta_gam):
+        g_eta, n_s_f = self.calc_g_flow(eta)
+        return (self.elastic.De_inv @ (sig_d - sig_d_tri)) + delta_gam * n_s_f
 
     def calc_j_f_ep(self, eta, delta_gam):
+        g_eta, n_s_f = self.calc_g_flow(eta)
         g_eta, n_s = self.calc_g(eta)
         dn_dsig = 3 /(2 * g_eta) * (I - np.outer(n_s / np.sqrt(3 / 2), n_s / np.sqrt(3 / 2)))
         f_ep_dsig = (self.elastic.De_inv + delta_gam * dn_dsig)
         f_ep_dbeta = - delta_gam * dn_dsig
         f_ep_dtheta = - delta_gam * dn_dsig
-        f_ep_dgamma = n_s
+        f_ep_dgamma = n_s_f
         matrices = (f_ep_dsig, f_ep_dbeta, f_ep_dtheta, np.matrix(f_ep_dgamma).transpose())
         return np.hstack(matrices)
 
-    def calc_f_beta(self, eta, delta_beta, delta_gam):
-        return delta_beta - (self.k * self.b / self.sig_y * eta - self.k * (self.beta + delta_beta)) * delta_gam
+    def calc_f_beta(self, eta, beta, delta_gam):
+        return beta - self.beta - (self.k * self.b / self.sig_y *  eta - self.k * (beta)) * delta_gam
 
-    def calc_j_f_beta(self, eta, delta_beta, delta_gam):
+    def calc_j_f_beta(self, eta, beta, delta_gam):
         f_beta_dsig = - self.k * self.b * delta_gam / self.sig_y * I
         f_beta_dbeta = (1.0 + self.k * self.b / self.sig_y * delta_gam + self.k * delta_gam) * I
         f_beta_dtheta = self.k * self.b * delta_gam / self.sig_y * I
-        f_beta_dgamma = - self.k * self.b / self.sig_y * eta + self.k * (self.beta + delta_beta)
+        f_beta_dgamma = - self.k * self.b / self.sig_y * eta + self.k * (beta)
         matrices = (f_beta_dsig, f_beta_dbeta, f_beta_dtheta, np.matrix(f_beta_dgamma).transpose())
         return np.hstack(matrices)
 
-    def calc_f_theta(self, eta, theta, a, delta_gam, n_s):
+    def calc_f_theta(self, eta, theta, a, delta_gam):
         theta_bar = np.sqrt(3 / 2) * self.calc_stress_norm(theta)
         if theta_bar == 0.0:
             return theta - self.theta - a * self.C * delta_gam / self.sig_y * eta
@@ -802,40 +810,59 @@ class Yoshida_uemori:
         if theta_bar == 0.0:
             f_theta_dtheta =  (1 + a * self.C * delta_gam / self.sig_y) * I
             f_theta_dgamma = (
-                - a * self.C / self.sig_y * eta -
-                self.C * delta_gam / self.sig_y * a_prime * eta
-            )
+                - a * self.C / self.sig_y -
+                self.C * delta_gam / self.sig_y * a_prime
+            ) * eta
         else:
             n_bar_theta = theta / (theta_bar / np.sqrt(3 / 2))
             f_theta_dtheta =  (
                 1 + a * self.C * delta_gam / self.sig_y +
                 self.C * delta_gam * np.sqrt(a / theta_bar)) * I - (
-                    np.sqrt(3 / 2) * self.C * delta_gam * np.sqrt(a) / (2 * theta_bar * np.sqrt(theta_bar)) * np.outer(n_bar_theta, theta)
+                    np.sqrt(3 / 2) * self.C * delta_gam * np.sqrt(a / theta_bar) / (2 * theta_bar) * self.Q @ np.outer(n_bar_theta, theta)
                 )
             f_theta_dgamma = (
                 - a * self.C / self.sig_y * eta -
                 self.C * delta_gam / self.sig_y * a_prime * eta +
                 self.C * np.sqrt(a / theta_bar) * theta +
-                self.C * delta_gam * np.sqrt(1 / theta_bar / a) * a_prime / 2 * theta
+                self.C * delta_gam * np.sqrt(1.0 / (theta_bar * a)) * a_prime / 2 * theta
             )
         matrices = (f_theta_dsig, f_theta_dbeta, f_theta_dtheta, np.matrix(f_theta_dgamma).transpose())
         return np.hstack(matrices)
+    
+    def calc_f_theta_dtheta(self, theta, a, delta_gam):
+        theta_bar = np.sqrt(3 / 2) * self.calc_stress_norm(theta)
+        n_bar_theta = theta / (theta_bar / np.sqrt(3 / 2))
+        f_theta_dtheta =  (
+            1 + a * self.C * delta_gam / self.sig_y +
+            self.C * delta_gam * np.sqrt(a / theta_bar)) * I - (
+                np.sqrt(3 / 2) * self.C * delta_gam * np.sqrt(a) / (2 * theta_bar * np.sqrt(theta_bar)) * np.outer(n_bar_theta, theta)
+            )
+        return f_theta_dtheta
 
-    def calc_jacobian(self, eta, delta_beta, delta_theta, a, delta_gam):
-        theta = self.theta + delta_theta
+    def calc_f_theta_dgamma(self, eta, theta, a, a_prime, delta_gam):
+        theta_bar = np.sqrt(3 / 2) * self.calc_stress_norm(theta)
+        f_theta_dgamma = (
+            - a * self.C / self.sig_y * eta -
+            self.C * delta_gam / self.sig_y * a_prime * eta +
+            self.C * np.sqrt(a / theta_bar) * theta +
+            self.C * delta_gam * np.sqrt(1 / theta_bar / a) * a_prime / 2 * theta
+        )
+        return f_theta_dgamma
+
+    def calc_jacobian(self, eta, beta, theta, a, delta_gam):
         j_f_f = self.calc_j_f_f(eta)
         j_f_ep = self.calc_j_f_ep(eta, delta_gam)
-        j_f_beta = self.calc_j_f_beta(eta, delta_beta, delta_gam)
+        j_f_beta = self.calc_j_f_beta(eta, beta, delta_gam)
         j_f_theta = self.calc_j_f_theta(eta, theta, a, delta_gam)
         matrices = (j_f_f, j_f_ep, j_f_beta, j_f_theta)
         return np.vstack(matrices)
 
-    def calc_f_vector(self, sig_d, sig_d_tri, beta, delta_beta, theta, a, delta_gam, n_s):
+    def calc_f_vector(self, sig_d, sig_d_tri, beta, theta, a, delta_gam):
         eta = sig_d - beta - theta
         f_f = self.calc_f_f(eta)
-        f_ep = self.calc_f_ep(sig_d, sig_d_tri, n_s, delta_gam)
-        f_beta = self.calc_f_beta(eta, delta_beta, delta_gam)
-        f_theta = self.calc_f_theta(eta, theta, a, delta_gam, n_s)
+        f_ep = self.calc_f_ep(sig_d, sig_d_tri, eta, delta_gam)
+        f_beta = self.calc_f_beta(eta, beta, delta_gam)
+        f_theta = self.calc_f_theta(eta, theta, a, delta_gam)
         vectors = ([f_f], f_ep, f_beta, f_theta)
         return np.hstack(vectors)
 
@@ -855,16 +882,14 @@ class Yoshida_uemori:
             sig_d_i = sig_d
             beta_i = self.beta
             theta_i = self.theta
-            a_i = self.a
+            a_i = self.B + self.R - self.sig_y
             eta_i = sig_d_i - beta_i - theta_i
-            g_i, n_s_i = self.calc_g(eta_i)
-            f_vector = self.calc_f_vector(sig_d_i, sig_d_tri, beta_i, np.zeros(6), theta_i, a_i, delta_gam_i, n_s_i)
-            jacobian = self.calc_jacobian(eta_i, np.zeros(6), np.zeros(6), a_i, delta_gam_i)
+            f_vector = self.calc_f_vector(sig_d_i, sig_d_tri, beta_i, theta_i, a_i, delta_gam_i)
+            jacobian = self.calc_jacobian(eta_i, beta_i, theta_i, a_i, delta_gam_i)
             for inew in range(self.RM_I):
                 print(f"Newton iteration {inew+1}")
-                d_delta_vector = np.linalg.inv(jacobian) @ f_vector
+                d_delta_vector = np.linalg.solve(jacobian, f_vector)
                 delta_vector -= np.array(d_delta_vector).flatten()
-                print(delta_vector)
                 delta_sig, delta_beta, delta_theta, delta_gam_i = self.divide_delta_vector(delta_vector)
                 sig_d_i = sig_d + delta_sig
                 beta_i = self.beta + delta_beta
@@ -872,10 +897,8 @@ class Yoshida_uemori:
                 R_i = 1 / (1 + self.k * delta_gam_i) * (self.R + self.k * self.Rsat * delta_gam_i)
                 a_i = self.B + R_i - self.sig_y
                 eta_i = sig_d_i - beta_i - theta_i
-                g_i, n_s_i = self.calc_g(eta_i)
-                f_vector = self.calc_f_vector(sig_d_i, sig_d_tri, beta_i, delta_beta, theta_i, a_i, delta_gam_i, n_s_i)
-                jacobian = self.calc_jacobian(eta_i, delta_beta, delta_theta, a_i, delta_gam_i)
-                print(f_vector)
+                f_vector = self.calc_f_vector(sig_d_i, sig_d_tri, beta_i, theta_i, a_i, delta_gam_i)
+                jacobian = self.calc_jacobian(eta_i, beta_i, theta_i, a_i, delta_gam_i)
                 if np.linalg.norm(f_vector) < self.TOL:
                     if delta_gam_i < 0.0:
                         raise ValueError("Delta gamma is negative value.")
@@ -886,8 +909,7 @@ class Yoshida_uemori:
                     raise ValueError("Return map isn't converged")
         else:
             print("Elastic behavior")
-            g_i, n_s_i = self.calc_g(eta_tri)
-        return delta_vector, n_s_i
+        return delta_vector
 
     def calc_Dep(self, sig_d, delta_gam, beta, theta):
         if delta_gam == 0.0:
@@ -923,13 +945,15 @@ class Yoshida_uemori:
         sig_tri = self.elastic.De @ eps_e_tri
         sig_d_tri = Id_s @ sig_tri
         sig_v = sig_tri - sig_d_tri
-        delta_vector, n_s_i = self.return_mapping(sig_d_i, sig_d_tri)
+        delta_vector = self.return_mapping(sig_d_i, sig_d_tri)
         delta_sig, delta_beta, delta_theta, delta_gam = self.divide_delta_vector(delta_vector)
         if delta_gam == 0.0:
             sig = sig_tri
             return sig, self.elastic.De
         sig_d = sig_d_i + delta_sig
-        self.update_i(delta_beta, delta_theta, delta_gam, n_s_i /np.sqrt(3 / 2))
+        eta = sig_d - (self.beta + delta_beta) - (self.theta + delta_theta)
+        g, n_s_f = self.calc_g_flow(eta)
+        self.update_i(delta_beta, delta_theta, delta_gam, n_s_f)
         sig = sig_d + sig_v
         beta = self.beta + delta_beta
         theta = self.theta + delta_theta
