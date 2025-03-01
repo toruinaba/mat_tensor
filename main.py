@@ -1,5 +1,5 @@
 import numpy as np
-from material import Elastic, AF_kinematic, Chaboche, Yoshida_uemori
+from src.material import Elastic, AF_kinematic, Chaboche, Yoshida_uemori
 from src.core import Calculator3D
 
 E = 206000.0
@@ -8,20 +8,26 @@ sig_y = 200
 
 elastic = Elastic(E, n)
 chaboche = Chaboche(elastic, 200.0, 20000.0, 30.0, 300.0, 100.0)
-yu = Yoshida_uemori(elastic, 124.0, 168.0, 500.0, 190.0, 12.0, 9.0, 0.1)
-calculator = Calculator3D(yu, np.array([202.5, 0.0, 0.0, 0.0, 0.0, 0.0]), 50)
-calculator.calculate_steps()
-calculator.goal_sig = np.array([-239.5, 0.0, 0.0, 0.0, 0.0, 0.0])
-calculator.calculate_steps(is_init=False)
-calculator.goal_sig = np.array([243.65, 0.0, 0.0, 0.0, 0.0, 0.0])
-calculator.calculate_steps(is_init=False)
-calculator.goal_sig = np.array([-243.85, 0.0, 0.0, 0.0, 0.0, 0.0])
-calculator.calculate_steps(is_init=False)
-calculator.goal_sig = np.array([244, 0.0, 0.0, 0.0, 0.0, 0.0])
-calculator.calculate_steps(is_init=False)
+yu = Yoshida_uemori(elastic, 124.0, 168.0, 500.0, 190.0, 12.0, 9.0, 0.5)
 
-x = [e[0] for e in calculator.output.eps_p]
-y = [s[0] for s in calculator.output.sig]
+a = [202.5, -244, 249.2, -248.87, 249.3]
+amps = [x for x in a]
+
+idx = 0
+
+goal_sig = np.zeros(6)
+goal_sig[idx] = amps[0]
+
+calculator = Calculator3D(yu, goal_sig)
+calculator.calculate_steps()
+
+if len(amps) >= 2:
+    for iamp in amps[1:]:
+        calculator.goal_sig[idx] = iamp
+        calculator.calculate_steps(is_init=False)
+
+x = [e[idx] for e in calculator.output.eps_p]
+y = [s[idx] for s in calculator.output.sig]
 
 from matplotlib import pyplot as plt
 
@@ -38,8 +44,7 @@ plt.show()
 
 x = [e for e in calculator.output.eff_eps_p]
 y = [r for r in calculator.output.r]
-y2 = [gr for gr in calculator.output.gr]
-
+y2 = [g for g in zip(calculator.output.gr)]
 fig = plt.figure()
 plt.plot(x, y)
 plt.plot(x, y2)

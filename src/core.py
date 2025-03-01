@@ -7,11 +7,15 @@ from src.material import Material_expression_base
 class Calculator3D:
     TOL = 1.0e-06
     NW_I = 100
+    TOTAL_TIME = 1.0
+    MAX_INCREMENT = 1000
 
-    def __init__(self, material: Material_expression_base, goal_sig: np.ndarray, step: int):
+    def __init__(self, material: Material_expression_base, goal_sig: np.ndarray, init_delta_t=0.01, min_delta_t=1.0e-05, max_delta_t=0.01):
         self.material = material
         self.goal_sig = goal_sig
-        self.step = step
+        self.init_delta_t = init_delta_t
+        self.min_delta_t = min_delta_t
+        self.max_delta_t = max_delta_t
         self.material.initialize()
         self.eps = np.array([0.0]*6)
         self.sig = np.array([0.0]*6)
@@ -26,6 +30,9 @@ class Calculator3D:
     def initialize(self):
         self.eps = np.array([0.0]*6)
         self.sig = np.array([0.0]*6)
+        self.current_time = 0.0
+        self.current_delta_t = self.init_delta_t
+        self.current_inc = 0
         self.output.initialize()
 
     def calc_increment(self, goal):
@@ -57,17 +64,42 @@ class Calculator3D:
                 raise ValueError(f"Not converged this iteration.")
 
     def calculate_steps(self, is_init=True):
+        counter = 0
         if is_init:
             self.initialize()
         initial_sig = deepcopy(self.sig)
-        for inc in range(self.step):
+        self.current_time = 0.0
+        self.current_delta_t = self.init_delta_t
+        self.current_inc = 0
+        while self.current_time < 1.0:
+            self.current_inc += 1
             print("="*80)
-            print(f"Increment {inc}")
+            print(f"Increment {self.current_inc}")
+            print(self.current_time)
+            print(self.current_delta_t)
+            attempt_time = self.current_time + self.current_delta_t if self.current_time + self.current_delta_t < 1.0 else 1.0
+            print(f"Attempt time: {attempt_time}")
+            goal = attempt_time / self.TOTAL_TIME * (self.goal_sig - initial_sig) + initial_sig
+            try:
+                self.calc_increment(goal)
+                counter += 1
+                self.current_time = attempt_time
+                if counter == 4:
+                    self.current_delta_t = self.current_delta_t * 1.25 if self.current_delta_t * 1.25 < self.max_delta_t else self.max_delta_t
+                    counter = 0
+            except ValueError:
+                if self.current_delta_t < self.min_delta_t:
+                    ValueError("Not converged")
+                self.current_delta_t *= 0.25
+            if self.current_inc >= self.MAX_INCREMENT:
+                raise ValueError("Not converged")
+            self.output.add_data(self.sig, self.eps, self.material.eps_p, self.material.eff_eps_p, self.material.theta, self.material.beta, self.material.r, self.material.R, self.material.q)
+            print(f"Ended time: {self.current_time}")
+        """
+        for inc in range(self.step):
             goal = (inc + 1) / self.step * (self.goal_sig - initial_sig) + initial_sig
             print(f"goal: {goal}")
-            self.calc_increment(goal)
-            self.output.add_data(self.sig, self.eps, self.material.eps_p, self.material.eff_eps_p, self.material.theta, self.material.beta, self.material.r, self.material.R, self.material.q)
-
+        """ 
 
 class Output_data:
     def __init__(self):

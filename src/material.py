@@ -739,20 +739,23 @@ class Yoshida_uemori:
         xi_n = self.beta_i - self.q
         g_stag = self.calc_g_stag(xi_n, self.r)
         g_stag_flow = xi_n @ delta_beta
-        print(g_stag, g_stag_flow)
         if g_stag > -self.TOL and g_stag_flow > -self.TOL:
             print("Hardening evolution")
             xi = self.beta - self.q
-            xi_xi = xi @ xi
-            dbeta_dbeta = delta_beta @ delta_beta
-            xi_dbeta = xi @ delta_beta
-            r_diff = (-3 * xi_dbeta + np.sqrt((3 * xi_dbeta)**2 - 3 * dbeta_dbeta * (3 * xi_xi - 2 * self.r**2))) / (3 * dbeta_dbeta)
-            beta_s = xi + r_diff * delta_beta
-            delta_beta_s = (1 - r_diff) * delta_beta
-
+            if abs(np.sqrt(self.calc_g_stag(xi, self.r))) < self.TOL:
+                delta_beta_s = delta_beta
+                print(self.calc_g_stag(xi, self.r))
+            else:
+                xi_xi = self.calc_stress_norm(xi)**2
+                dbeta_dbeta = self.calc_stress_norm(delta_beta)**2
+                xi_dbeta = xi @ delta_beta
+                r_diff = (-3 * xi_dbeta + np.sqrt((3 * xi_dbeta)**2 - 3 * dbeta_dbeta * (3 * xi_xi - 2 * self.r**2))) / (3 * dbeta_dbeta)
+                beta_s = xi + r_diff * delta_beta
+                xi_s = beta_s - self.q
+                print(self.calc_g_stag(xi_s, self.r))
+                delta_beta_s = (1 - r_diff) * delta_beta
             xi_P_del_beta = xi_n @ (Id_s @ delta_beta_s)
             xi_P_xi = xi_n @ (Id_s @ xi_n)
-            print(xi_P_del_beta, xi_P_xi)
             if abs(self.r) < self.TOL:
                 test_mu = 3 * xi_P_xi / (6 * self.h * xi_P_del_beta) - 1
             else:
@@ -769,6 +772,8 @@ class Yoshida_uemori:
             self.q_i = self.q + q_dot_i
             self.r_i = np.sqrt(self.r**2 + 3 * self.h * xi_i @ (Id_s @ delta_beta_s))
             self.R_i = 1 / (1 + self.k * delta_gam) * (self.R + self.k * self.Rsat * delta_gam)
+            xi_last = self.beta_i - self.q_i
+            print(f"updated: {self.calc_g_stag(xi_last, self.r_i)}")
         else:
             self.q_i = self.q
             self.r_i = self.r
@@ -1023,4 +1028,7 @@ class Yoshida_uemori:
         theta = self.theta + delta_theta
 
         Dep = self.calc_Dep(sig_d, delta_gam, beta, theta, hardening_flag)
+        d_sig = delta_sig + 1/3 * IxI @ (self.elastic.De @ del_eps)
+        d_sig2 = Dep @ del_eps
+        print(d_sig, d_sig2)
         return sig, Dep
