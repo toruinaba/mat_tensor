@@ -66,7 +66,7 @@ class Calculator3D:
             goal = (inc + 1) / self.step * (self.goal_sig - initial_sig) + initial_sig
             print(f"goal: {goal}")
             self.calc_increment(goal)
-            self.output.add_data(self.sig, self.eps, self.material.eps_p, self.material.eff_eps_p)
+            self.output.add_data(self.sig, self.eps, self.material.eps_p, self.material.eff_eps_p, self.material.theta, self.material.beta, self.material.r, self.material.R, self.material.q)
 
 
 class Output_data:
@@ -79,13 +79,25 @@ class Output_data:
         self.eps_p = []
         self.eff_eps_p = []
         self.mises = []
+        self.r = []
+        self.R = []
+        self.q = []
+        self.theta = []
+        self.beta = []
+        self.gr = []
 
-    def add_data(self, sig, eps, eps_p, eff_eps_p):
+    def add_data(self, sig, eps, eps_p, eff_eps_p, theta, beta, r, R, q):
         self.sig.append(sig)
         self.eps.append(eps)
         self.eps_p.append(eps_p)
         self.eff_eps_p.append(eff_eps_p)
         self.mises.append(self.calc_mises(sig))
+        self.theta.append(theta)
+        self.beta.append(beta)
+        self.r.append(r)
+        self.R.append(R)
+        self.q.append(q)
+        self.gr.append(self.calc_mises(beta - q))
 
     def calc_mises(self, sig):
         sig_d = Id_s @ sig

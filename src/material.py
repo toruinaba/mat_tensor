@@ -731,13 +731,48 @@ class Yoshida_uemori:
         self.q = np.zeros(6)
         self.q_i = np.zeros(6)
 
-
     def update_i(self, delta_beta, delta_theta, delta_gam, n_flow):
         self.beta_i = self.beta + delta_beta
         self.theta_i = self.theta + delta_theta
         self.eps_p_i = self.eps_p + delta_gam * n_flow
         self.eff_eps_p_i = self.eff_eps_p + delta_gam
-        self.R_i = 1 / (1 + self.k * delta_gam) * (self.R + self.k * self.Rsat * delta_gam) 
+        xi_n = self.beta_i - self.q
+        g_stag = self.calc_g_stag(xi_n, self.r)
+        g_stag_flow = xi_n @ delta_beta
+        print(g_stag, g_stag_flow)
+        if g_stag > -self.TOL and g_stag_flow > -self.TOL:
+            print("Hardening evolution")
+            xi = self.beta - self.q
+            xi_xi = xi @ xi
+            dbeta_dbeta = delta_beta @ delta_beta
+            xi_dbeta = xi @ delta_beta
+            r_diff = (-3 * xi_dbeta + np.sqrt((3 * xi_dbeta)**2 - 3 * dbeta_dbeta * (3 * xi_xi - 2 * self.r**2))) / (3 * dbeta_dbeta)
+            beta_s = xi + r_diff * delta_beta
+            delta_beta_s = (1 - r_diff) * delta_beta
+
+            xi_P_del_beta = xi_n @ (Id_s @ delta_beta_s)
+            xi_P_xi = xi_n @ (Id_s @ xi_n)
+            print(xi_P_del_beta, xi_P_xi)
+            if abs(self.r) < self.TOL:
+                test_mu = 3 * xi_P_xi / (6 * self.h * xi_P_del_beta) - 1
+            else:
+                a = self.r**2
+                b = 3 * self.h * xi_P_del_beta
+                c = - 3 / 2 * xi_P_xi
+                s = (-3 * self.h * xi_P_del_beta + np.sqrt((3 * self.h * xi_P_del_beta)**2 + 4 * self.r**2 * 3 / 2 * xi_P_xi)) / (2 * self.r**2)
+                g = c + b * s + a * s**2
+                test_mu = s - 1
+                if test_mu < 0.0:
+                    raise ValueError(f"Delta mu is negative({test_mu})")
+            xi_i = xi_n / (1 + test_mu)
+            q_dot_i = test_mu * xi_i
+            self.q_i = self.q + q_dot_i
+            self.r_i = np.sqrt(self.r**2 + 3 * self.h * xi_i @ (Id_s @ delta_beta_s))
+            self.R_i = 1 / (1 + self.k * delta_gam) * (self.R + self.k * self.Rsat * delta_gam)
+        else:
+            self.q_i = self.q
+            self.r_i = self.r
+            self.R_i = self.R
 
     def update(self):
         self.eps_p = self.eps_p_i
@@ -745,6 +780,8 @@ class Yoshida_uemori:
         self.beta = self.beta_i
         self.theta = self.theta_i
         self.R = self.R_i
+        self.q = self.q_i
+        self.r = self.r_i
 
     def calc_g(self, sig_d):
         norm = self.calc_stress_norm(sig_d)
@@ -755,6 +792,17 @@ class Yoshida_uemori:
         norm = self.calc_stress_norm(sig_d)
         n_bar = sig_d / norm
         return np.sqrt(3 / 2) * norm, np.sqrt(3 / 2) * self.Q @ n_bar
+
+    def calc_g_stag(self, xi, r):
+        return 3 / 2 * xi @ (Id_s @ xi) - r**2
+
+    def calc_delta_mu(self, delta_beta):
+        if self.r == 0:
+            return 0.0
+        xi_n = self.beta + delta_beta - self.q
+        xi_P_del_beta = xi_n @ (Id_s @ delta_beta)
+        xi_P_xi = xi_n @ (Id_s @ xi_n)
+        return (3 * self.h * xi_P_del_beta + np.sqrt((3 * self.h * xi_P_del_beta)**2 + 6 * self.r**2 * xi_P_xi)) / (2 * self.r**2) - 1
 
     def calc_f_f(self, eta):
         g_eta, n_s = self.calc_g(eta)
@@ -801,10 +849,13 @@ class Yoshida_uemori:
             return theta - self.theta - a * self.C * delta_gam / self.sig_y * eta
         return theta - self.theta - a * self.C * delta_gam / self.sig_y * eta + self.C * delta_gam * np.sqrt(a / theta_bar) * theta
 
-    def calc_j_f_theta(self, eta, theta, a, delta_gam):
+    def calc_j_f_theta(self, eta, theta, a, delta_gam, hardening_flag):
         theta_bar = np.sqrt(3 / 2) * self.calc_stress_norm(theta)
         s = 1 / (1 + self.k * delta_gam)
-        a_prime = - self.k * s**2 * (self.R + self.k * self.Rsat * delta_gam) + s * self.k * self.Rsat
+        if hardening_flag:
+            a_prime = - self.k * s**2 * (self.R + self.k * self.Rsat * delta_gam) + s * self.k * self.Rsat
+        else:
+            a_prime = 0.0
         f_theta_dsig = - a * self.C * delta_gam / self.sig_y * I
         f_theta_dbeta = a * self.C * delta_gam / self.sig_y * I
         if theta_bar == 0.0:
@@ -849,11 +900,11 @@ class Yoshida_uemori:
         )
         return f_theta_dgamma
 
-    def calc_jacobian(self, eta, beta, theta, a, delta_gam):
+    def calc_jacobian(self, eta, beta, theta, a, delta_gam, hardening_flag):
         j_f_f = self.calc_j_f_f(eta)
         j_f_ep = self.calc_j_f_ep(eta, delta_gam)
         j_f_beta = self.calc_j_f_beta(eta, beta, delta_gam)
-        j_f_theta = self.calc_j_f_theta(eta, theta, a, delta_gam)
+        j_f_theta = self.calc_j_f_theta(eta, theta, a, delta_gam, hardening_flag)
         matrices = (j_f_f, j_f_ep, j_f_beta, j_f_theta)
         return np.vstack(matrices)
 
@@ -877,6 +928,7 @@ class Yoshida_uemori:
         delta_gam_i = 0.0
         eta_tri = sig_d_tri - self.theta - self.beta
         f_tri = self.calc_f_f(eta_tri)
+        hardening_flag = True
         if f_tri > 0.0:
             print("Plastic behavior")
             sig_d_i = sig_d
@@ -885,7 +937,7 @@ class Yoshida_uemori:
             a_i = self.B + self.R - self.sig_y
             eta_i = sig_d_i - beta_i - theta_i
             f_vector = self.calc_f_vector(sig_d_i, sig_d_tri, beta_i, theta_i, a_i, delta_gam_i)
-            jacobian = self.calc_jacobian(eta_i, beta_i, theta_i, a_i, delta_gam_i)
+            jacobian = self.calc_jacobian(eta_i, beta_i, theta_i, a_i, delta_gam_i, hardening_flag)
             for inew in range(self.RM_I):
                 print(f"Newton iteration {inew+1}")
                 d_delta_vector = np.linalg.solve(jacobian, f_vector)
@@ -894,11 +946,21 @@ class Yoshida_uemori:
                 sig_d_i = sig_d + delta_sig
                 beta_i = self.beta + delta_beta
                 theta_i = self.theta + delta_theta
-                R_i = 1 / (1 + self.k * delta_gam_i) * (self.R + self.k * self.Rsat * delta_gam_i)
-                a_i = self.B + R_i - self.sig_y
+                xi_n = beta_i - self.q
+                g_stag = self.calc_g_stag(xi_n, self.r)
+                g_stag_flow = xi_n @ delta_beta
+                if g_stag > -self.TOL and g_stag_flow > -self.TOL:
+                    print("Hardening evolution")
+                    hardening_flag = True
+                    R_i = 1 / (1 + self.k * delta_gam_i) * (self.R + self.k * self.Rsat * delta_gam_i)
+                    a_i = self.B + R_i - self.sig_y
+                else:
+                    print("Hardening stagnation")
+                    hardening_flag = False
+                    a_i = self.B + self.R - self.sig_y
                 eta_i = sig_d_i - beta_i - theta_i
                 f_vector = self.calc_f_vector(sig_d_i, sig_d_tri, beta_i, theta_i, a_i, delta_gam_i)
-                jacobian = self.calc_jacobian(eta_i, beta_i, theta_i, a_i, delta_gam_i)
+                jacobian = self.calc_jacobian(eta_i, beta_i, theta_i, a_i, delta_gam_i, hardening_flag)
                 if np.linalg.norm(f_vector) < self.TOL:
                     if delta_gam_i < 0.0:
                         raise ValueError("Delta gamma is negative value.")
@@ -909,17 +971,19 @@ class Yoshida_uemori:
                     raise ValueError("Return map isn't converged")
         else:
             print("Elastic behavior")
-        return delta_vector
+        return delta_vector, hardening_flag
 
-    def calc_Dep(self, sig_d, delta_gam, beta, theta):
+    def calc_Dep(self, sig_d, delta_gam, beta, theta, hardening_flag):
         if delta_gam == 0.0:
             return self.elastic.De
         eta = sig_d - beta - theta
-        R = 1 / (1 + self.k * delta_gam) * (self.R + self.k * self.Rsat * delta_gam)
-        a = self.B + R - self.sig_y
         theta_bar = np.sqrt(3 / 2) * self.calc_stress_norm(theta)
-        g_eta, m = self.calc_g(eta)
-        
+        g_eta, m = self.calc_g_flow(eta)
+        if hardening_flag:
+            a = self.B + self.R_i - self.sig_y
+        else:
+            a = self.B + self.R - self.sig_y
+        """
         dm_dsig = 3 /(2 * g_eta) * (I - np.outer(m / np.sqrt(3 / 2), m / np.sqrt(3 / 2)))
         n = a * self.C / self.sig_y * eta - self.C * np.sqrt(a / theta_bar) * theta + self.k * self.b / self.sig_y * eta - self.k * beta
         TH = self.elastic.De_inv + delta_gam * dm_dsig
@@ -934,7 +998,7 @@ class Yoshida_uemori:
         S = (self.C * a + self.k * self.b) / self.sig_y * eta - (self.C * np.sqrt(a / theta_bar) * theta + self.k * beta)
         n_s = m @ S
         return self.elastic.De - D_n_n_D / (n_D_n + n_s)
-        """
+        
 
 
     def integrate_stress(self, eps, del_eps):
@@ -945,7 +1009,7 @@ class Yoshida_uemori:
         sig_tri = self.elastic.De @ eps_e_tri
         sig_d_tri = Id_s @ sig_tri
         sig_v = sig_tri - sig_d_tri
-        delta_vector = self.return_mapping(sig_d_i, sig_d_tri)
+        delta_vector, hardening_flag = self.return_mapping(sig_d_i, sig_d_tri)
         delta_sig, delta_beta, delta_theta, delta_gam = self.divide_delta_vector(delta_vector)
         if delta_gam == 0.0:
             sig = sig_tri
@@ -957,5 +1021,6 @@ class Yoshida_uemori:
         sig = sig_d + sig_v
         beta = self.beta + delta_beta
         theta = self.theta + delta_theta
-        Dep = self.calc_Dep(sig_d, delta_gam, beta, theta)
+
+        Dep = self.calc_Dep(sig_d, delta_gam, beta, theta, hardening_flag)
         return sig, Dep
