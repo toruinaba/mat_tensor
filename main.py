@@ -8,7 +8,7 @@ sig_y = 200
 
 elastic = Elastic(E, n)
 chaboche = Chaboche(elastic, 200.0, 20000.0, 30.0, 300.0, 100.0)
-yu = Yoshida_uemori(elastic, 124.0, 168.0, 500.0, 190.0, 12.0, 9.0, 0.5)
+yu = Yoshida_uemori(elastic, 124.0, 168.0, 500.0, 190.0, 12.0, 9.0, 0.5, 159000.0, 30.8)
 
 a = [202.5, -244, 249.2, -248.87, 249.3]
 amps = [x for x in a]
@@ -26,7 +26,7 @@ if len(amps) >= 2:
         calculator.goal_sig[idx] = iamp
         calculator.calculate_steps(is_init=False)
 
-x = [e[idx] for e in calculator.output.eps_p]
+x = [e[idx] for e in calculator.output.eps]
 y = [s[idx] for s in calculator.output.sig]
 
 from matplotlib import pyplot as plt

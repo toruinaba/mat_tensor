@@ -674,7 +674,7 @@ class Yoshida_uemori:
     RM_I = 10
     Q = np.diag([1.0, 1.0, 1.0, 2.0, 2.0, 2.0])
 
-    def __init__(self, elastic: Elastic, sig_y: float, B, C, Rsat, k, b, h):
+    def __init__(self, elastic: Elastic, sig_y: float, B, C, Rsat, k, b, h, Ea, psi):
         self.elastic = elastic
         self.sig_y = sig_y
         self.B = B
@@ -683,6 +683,8 @@ class Yoshida_uemori:
         self.k = k
         self.b = b
         self.h = h
+        self.Ea = Ea
+        self.psi = psi
         self.eps_p = np.zeros(6)
         self.eps_p_i = np.zeros(6)
         self.eff_eps_p = 0.0
@@ -710,12 +712,20 @@ class Yoshida_uemori:
         return self.sig_y
 
     @property
-    def alpha(self):
-        return self.theta + self.beta
-
-    @property
     def a(self):
         return self.B + self.R - self.sig_y
+
+    @property
+    def De_factor(self):
+        return 1.0 - (1.0 - self.elastic.E / self.Ea) * (1.0 - np.exp(-self.psi * self.eff_eps_p))
+
+    @property
+    def De(self):
+        return self.De_factor * self.elastic.De
+
+    @property
+    def De_inv(self):
+        return np.linalg.inv(self.De)
 
     def initialize(self):
         self.eps_p = np.zeros(6)
@@ -754,8 +764,8 @@ class Yoshida_uemori:
                 xi_s = beta_s - self.q
                 print(self.calc_g_stag(xi_s, self.r))
                 delta_beta_s = (1 - r_diff) * delta_beta
-            xi_P_del_beta = xi_n @ (Id_s @ delta_beta_s)
-            xi_P_xi = xi_n @ (Id_s @ xi_n)
+            xi_P_del_beta = (self.Q @ xi_n) @ (Id_s @ delta_beta_s)
+            xi_P_xi = (self.Q @ xi_n) @ (Id_s @ xi_n)
             if abs(self.r) < self.TOL:
                 test_mu = 3 * xi_P_xi / (6 * self.h * xi_P_del_beta) - 1
             else:
@@ -824,16 +834,17 @@ class Yoshida_uemori:
 
     def calc_f_ep(self, sig_d, sig_d_tri, eta, delta_gam):
         g_eta, n_s_f = self.calc_g_flow(eta)
-        return (self.elastic.De_inv @ (sig_d - sig_d_tri)) + delta_gam * n_s_f
+        return (self.De_inv @ (sig_d - sig_d_tri)) + delta_gam * n_s_f
 
-    def calc_j_f_ep(self, eta, delta_gam):
+    def calc_j_f_ep(self, sig_d, sig_d_tri, eta, delta_gam):
         g_eta, n_s_f = self.calc_g_flow(eta)
         g_eta, n_s = self.calc_g(eta)
         dn_dsig = 3 /(2 * g_eta) * (I - np.outer(n_s / np.sqrt(3 / 2), n_s / np.sqrt(3 / 2)))
-        f_ep_dsig = (self.elastic.De_inv + delta_gam * dn_dsig)
+        f_ep_dsig = (self.De_inv + delta_gam * dn_dsig)
         f_ep_dbeta = - delta_gam * dn_dsig
         f_ep_dtheta = - delta_gam * dn_dsig
-        f_ep_dgamma = n_s_f
+        factor = 1.0 - (1 - self.Ea / self.elastic.E) * (1 - np.exp(-self.psi * (self.eff_eps_p + delta_gam)))
+        f_ep_dgamma = (1 - self.Ea / self.elastic.E) * self.psi * np.exp(-self.psi * (self.eff_eps_p + delta_gam)) / factor**2 * self.De_inv @ (sig_d - sig_d_tri) + n_s_f
         matrices = (f_ep_dsig, f_ep_dbeta, f_ep_dtheta, np.matrix(f_ep_dgamma).transpose())
         return np.hstack(matrices)
 
@@ -870,11 +881,11 @@ class Yoshida_uemori:
                 self.C * delta_gam / self.sig_y * a_prime
             ) * eta
         else:
-            n_bar_theta = theta / (theta_bar / np.sqrt(3 / 2))
+            n_bar_theta = self.Q @ theta / (theta_bar / np.sqrt(3 / 2))
             f_theta_dtheta =  (
                 1 + a * self.C * delta_gam / self.sig_y +
                 self.C * delta_gam * np.sqrt(a / theta_bar)) * I - (
-                    np.sqrt(3 / 2) * self.C * delta_gam * np.sqrt(a / theta_bar) / (2 * theta_bar) * self.Q @ np.outer(n_bar_theta, theta)
+                    np.sqrt(3 / 2) * self.C * delta_gam * np.sqrt(a / theta_bar) / (2 * theta_bar) * np.outer(n_bar_theta, theta)
                 )
             f_theta_dgamma = (
                 - a * self.C / self.sig_y * eta -
@@ -887,7 +898,7 @@ class Yoshida_uemori:
     
     def calc_f_theta_dtheta(self, theta, a, delta_gam):
         theta_bar = np.sqrt(3 / 2) * self.calc_stress_norm(theta)
-        n_bar_theta = theta / (theta_bar / np.sqrt(3 / 2))
+        n_bar_theta = self.Q @ theta / (theta_bar / np.sqrt(3 / 2))
         f_theta_dtheta =  (
             1 + a * self.C * delta_gam / self.sig_y +
             self.C * delta_gam * np.sqrt(a / theta_bar)) * I - (
@@ -905,9 +916,9 @@ class Yoshida_uemori:
         )
         return f_theta_dgamma
 
-    def calc_jacobian(self, eta, beta, theta, a, delta_gam, hardening_flag):
+    def calc_jacobian(self, sig_d, sig_d_tri, eta, beta, theta, a, delta_gam, hardening_flag):
         j_f_f = self.calc_j_f_f(eta)
-        j_f_ep = self.calc_j_f_ep(eta, delta_gam)
+        j_f_ep = self.calc_j_f_ep(sig_d, sig_d_tri, eta, delta_gam)
         j_f_beta = self.calc_j_f_beta(eta, beta, delta_gam)
         j_f_theta = self.calc_j_f_theta(eta, theta, a, delta_gam, hardening_flag)
         matrices = (j_f_f, j_f_ep, j_f_beta, j_f_theta)
@@ -942,7 +953,7 @@ class Yoshida_uemori:
             a_i = self.B + self.R - self.sig_y
             eta_i = sig_d_i - beta_i - theta_i
             f_vector = self.calc_f_vector(sig_d_i, sig_d_tri, beta_i, theta_i, a_i, delta_gam_i)
-            jacobian = self.calc_jacobian(eta_i, beta_i, theta_i, a_i, delta_gam_i, hardening_flag)
+            jacobian = self.calc_jacobian(sig_d_i, sig_d_tri, eta_i, beta_i, theta_i, a_i, delta_gam_i, hardening_flag)
             for inew in range(self.RM_I):
                 print(f"Newton iteration {inew+1}")
                 d_delta_vector = np.linalg.solve(jacobian, f_vector)
@@ -965,7 +976,7 @@ class Yoshida_uemori:
                     a_i = self.B + self.R - self.sig_y
                 eta_i = sig_d_i - beta_i - theta_i
                 f_vector = self.calc_f_vector(sig_d_i, sig_d_tri, beta_i, theta_i, a_i, delta_gam_i)
-                jacobian = self.calc_jacobian(eta_i, beta_i, theta_i, a_i, delta_gam_i, hardening_flag)
+                jacobian = self.calc_jacobian(sig_d_i, sig_d_tri, eta_i, beta_i, theta_i, a_i, delta_gam_i, hardening_flag)
                 if np.linalg.norm(f_vector) < self.TOL:
                     if delta_gam_i < 0.0:
                         raise ValueError("Delta gamma is negative value.")
@@ -980,7 +991,7 @@ class Yoshida_uemori:
 
     def calc_Dep(self, sig_d, delta_gam, beta, theta, hardening_flag):
         if delta_gam == 0.0:
-            return self.elastic.De
+            return self.De
         eta = sig_d - beta - theta
         theta_bar = np.sqrt(3 / 2) * self.calc_stress_norm(theta)
         g_eta, m = self.calc_g_flow(eta)
@@ -998,27 +1009,27 @@ class Yoshida_uemori:
         mn = m @ n
         return TH_inv - (np.outer(THm_s, THm)) / (m @ THm_s + mn)
         """
-        D_n_n_D = self.elastic.De @ (np.outer(m, m) @ self.elastic.De)
-        n_D_n = m @ (self.elastic.De @ m)
+        D_n_n_D = self.De @ (np.outer(m, m) @ self.De)
+        n_D_n = m @ (self.De @ m)
         S = (self.C * a + self.k * self.b) / self.sig_y * eta - (self.C * np.sqrt(a / theta_bar) * theta + self.k * beta)
         n_s = m @ S
-        return self.elastic.De - D_n_n_D / (n_D_n + n_s)
+        return self.De - D_n_n_D / (n_D_n + n_s)
         
 
 
     def integrate_stress(self, eps, del_eps):
         eps_tri = eps + del_eps
-        sig_i = self.elastic.De @ (eps - self.eps_p)
+        sig_i = self.De @ (eps - self.eps_p)
         sig_d_i = Id_s @ sig_i
         eps_e_tri = eps_tri - self.eps_p
-        sig_tri = self.elastic.De @ eps_e_tri
+        sig_tri = self.De @ eps_e_tri
         sig_d_tri = Id_s @ sig_tri
         sig_v = sig_tri - sig_d_tri
         delta_vector, hardening_flag = self.return_mapping(sig_d_i, sig_d_tri)
         delta_sig, delta_beta, delta_theta, delta_gam = self.divide_delta_vector(delta_vector)
         if delta_gam == 0.0:
             sig = sig_tri
-            return sig, self.elastic.De
+            return sig, self.De
         sig_d = sig_d_i + delta_sig
         eta = sig_d - (self.beta + delta_beta) - (self.theta + delta_theta)
         g, n_s_f = self.calc_g_flow(eta)
@@ -1028,7 +1039,7 @@ class Yoshida_uemori:
         theta = self.theta + delta_theta
 
         Dep = self.calc_Dep(sig_d, delta_gam, beta, theta, hardening_flag)
-        d_sig = delta_sig + 1/3 * IxI @ (self.elastic.De @ del_eps)
-        d_sig2 = Dep @ del_eps
-        print(d_sig, d_sig2)
+        #d_sig = delta_sig + 1/3 * IxI @ (self.elastic.De @ del_eps)
+        #d_sig2 = Dep @ del_eps
+        #print(d_sig, d_sig2)
         return sig, Dep
