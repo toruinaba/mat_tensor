@@ -95,11 +95,7 @@ class Calculator3D:
                 raise ValueError("Not converged")
             self.output.add_data(self.sig, self.eps, self.material.eps_p, self.material.eff_eps_p, self.material.theta, self.material.beta, self.material.r, self.material.R, self.material.q)
             print(f"Ended time: {self.current_time}")
-        """
-        for inc in range(self.step):
-            goal = (inc + 1) / self.step * (self.goal_sig - initial_sig) + initial_sig
-            print(f"goal: {goal}")
-        """ 
+
 
 class Output_data:
     def __init__(self):
