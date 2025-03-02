@@ -43,7 +43,7 @@ class Calculator3D:
         print(f"Initial dela eps: {del_eps}")
         for itr in range(self.NW_I):
             print("-"*80)
-            print(f"Iteration: {itr+1}")
+            print(f"\nIteration: {itr+1}\n")
             sig_i, Dep = self.material.integrate_stress(self.eps, del_eps)
             print(f"Corrected sig: {sig_i}")
             sig_diff = goal - sig_i
@@ -74,9 +74,8 @@ class Calculator3D:
         while self.current_time < 1.0:
             self.current_inc += 1
             print("="*80)
-            print(f"Increment {self.current_inc}")
-            print(self.current_time)
-            print(self.current_delta_t)
+            print(f"\nIncrement {self.current_inc}\n")
+            print("="*80)
             attempt_time = self.current_time + self.current_delta_t if self.current_time + self.current_delta_t < 1.0 else 1.0
             print(f"Attempt time: {attempt_time}")
             goal = attempt_time / self.TOTAL_TIME * (self.goal_sig - initial_sig) + initial_sig
@@ -93,7 +92,7 @@ class Calculator3D:
                 self.current_delta_t *= 0.25
             if self.current_inc >= self.MAX_INCREMENT:
                 raise ValueError("Not converged")
-            self.output.add_data(self.sig, self.eps, self.material.eps_p, self.material.eff_eps_p, self.material.theta, self.material.beta, self.material.r, self.material.R, self.material.q)
+            self.output.add_data(self.sig, self.eps, self.material.eps_p, self.material.eff_eps_p)
             print(f"Ended time: {self.current_time}")
 
 
@@ -107,25 +106,13 @@ class Output_data:
         self.eps_p = []
         self.eff_eps_p = []
         self.mises = []
-        self.r = []
-        self.R = []
-        self.q = []
-        self.theta = []
-        self.beta = []
-        self.gr = []
 
-    def add_data(self, sig, eps, eps_p, eff_eps_p, theta, beta, r, R, q):
+    def add_data(self, sig, eps, eps_p, eff_eps_p):
         self.sig.append(sig)
         self.eps.append(eps)
         self.eps_p.append(eps_p)
         self.eff_eps_p.append(eff_eps_p)
         self.mises.append(self.calc_mises(sig))
-        self.theta.append(theta)
-        self.beta.append(beta)
-        self.r.append(r)
-        self.R.append(R)
-        self.q.append(q)
-        self.gr.append(self.calc_mises(beta - q))
 
     def calc_mises(self, sig):
         sig_d = Id_s @ sig

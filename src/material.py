@@ -778,6 +778,7 @@ class Yoshida_uemori:
             self.R_i = 1 / (1 + self.k * delta_gam) * (self.R + self.k * self.Rsat * delta_gam)
             xi_last = self.beta_i - self.q_i
         else:
+            print("Hardening stagnation")
             self.q_i = self.q
             self.r_i = self.r
             self.R_i = self.R
@@ -831,8 +832,7 @@ class Yoshida_uemori:
 
     def calc_j_f_ep(self, sig_d, sig_d_tri, eta, delta_gam):
         g_eta, n_s_f = self.calc_g_flow(eta)
-        g_eta, n_s = self.calc_g(eta)
-        dn_dsig = 3 /(2 * g_eta) * (I - np.outer(n_s / np.sqrt(3 / 2), n_s / np.sqrt(3 / 2)))
+        dn_dsig = 3 /(2 * g_eta) * (I - np.outer(n_s_f / np.sqrt(3 / 2), n_s_f / np.sqrt(3 / 2)))
         f_ep_dsig = (self.De_inv + delta_gam * dn_dsig)
         f_ep_dbeta = - delta_gam * dn_dsig
         f_ep_dtheta = - delta_gam * dn_dsig
@@ -959,12 +959,10 @@ class Yoshida_uemori:
                 g_stag = self.calc_g_stag(xi_n, self.r)
                 g_stag_flow = (self.Q @ xi_n) @ delta_beta
                 if g_stag > -self.TOL and g_stag_flow > -self.TOL:
-                    print("Hardening evolution")
                     hardening_flag = True
                     R_i = 1 / (1 + self.k * delta_gam_i) * (self.R + self.k * self.Rsat * delta_gam_i)
                     a_i = self.B + R_i - self.sig_y
                 else:
-                    print("Hardening stagnation")
                     hardening_flag = False
                     a_i = self.B + self.R - self.sig_y
                 eta_i = sig_d_i - beta_i - theta_i
