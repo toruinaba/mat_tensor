@@ -837,7 +837,7 @@ class Yoshida_uemori:
         f_ep_dbeta = - delta_gam * dn_dsig
         f_ep_dtheta = - delta_gam * dn_dsig
         factor = 1.0 - (1 - self.Ea / self.elastic.E) * (1 - np.exp(-self.psi * (self.eff_eps_p + delta_gam)))
-        f_ep_dgamma = (1 - self.Ea / self.elastic.E) * self.psi * np.exp(-self.psi * (self.eff_eps_p + delta_gam)) / factor**2 * self.De_inv @ (sig_d - sig_d_tri) + n_s_f
+        f_ep_dgamma = self.psi * (1 - factor) / factor**2 * self.De_inv @ (sig_d - sig_d_tri) + n_s_f
         matrices = (f_ep_dsig, f_ep_dbeta, f_ep_dtheta, np.matrix(f_ep_dgamma).transpose())
         return np.hstack(matrices)
 

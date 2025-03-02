@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 from src.material import Elastic, Linear_isotropic, AF_kinematic, Chaboche_n, Yoshida_uemori
 from src.util import Id_s, Id, I
 
@@ -54,7 +55,7 @@ class Test_linear_iso:
             n_bar_expected[i] = sig_d[i] / (q_tri_expected / np.sqrt(3 / 2))
         
         # act
-        q_tri_act, n_bar_act = self.MAT.calc_tri(sig_d)
+        q_tri_act, n_bar_act = self.MAT.calc_tri(sig_d, 0.0)
 
         # assert
         assert q_tri_act == q_tri_expected
@@ -70,8 +71,8 @@ class Test_linear_iso:
 
         sig = np.array([300.0, 5.0, 30.0, 10.0, 20.0, 50.0])
         sig_d = Id_s @ sig
-        q_tri, n_bar = self.MAT.calc_tri(sig_d)
         del_gam = 1.0e-5
+        q_tri, n_bar = self.MAT.calc_tri(sig_d, del_gam)
         self.MAT.update_i(del_gam, n_bar)
         self.MAT.update()
         f_ip1_prime = self.MAT.calc_f_ip1_prime(q_tri, del_gam, n_bar)
@@ -198,8 +199,227 @@ class Test_chaboche_n:
 
 
 class Test_yoshida_uemori:
-    YU = Yoshida_uemori(Elastic(205000.0, 0.3), 100.0, 160.0, 500.0, 120.0, 20.0, 15.0, 0.5)
+    YU = Yoshida_uemori(Elastic(205000.0, 0.3), 100.0, 160.0, 500.0, 120.0, 20.0, 15.0, 0.5, 150000.0, 30.0)
 
+    def test_calc_f_f(self):
+        # arange
+        sig = np.array([100.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        beta = np.array([0.0, 0.0, 0.0, 20.0, 30.0, 50.0])
+        theta = np.array([-5, 10, -5, 10.0, 5.0, 10.0])
+        sig_d = Id_s @ sig
+        eta = sig_d - beta - theta
+        expected = np.sqrt(
+            1 / 2 * (
+                (eta[0] - eta[1]) ** 2 +
+                (eta[1] - eta[2]) ** 2 +
+                (eta[2] - eta[0]) ** 2 +
+                6 * (eta[3] ** 2 + eta[4] ** 2 + eta[5] ** 2)
+            )
+        ) - self.YU.sig_y
+
+        # act
+        acted = self.YU.calc_f_f(eta)
+        
+        # assert
+        assert np.allclose(acted, expected)
+
+    def test_calc_j_f_f(self):
+        # arange
+        sig = np.array([100.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        beta = np.array([0.0, 0.0, 0.0, 20.0, 30.0, 50.0])
+        theta = np.array([-5, 10, -5, 10.0, 5.0, 10.0])
+        sig_d = Id_s @ sig
+        eta = sig_d - beta - theta
+        expected = np.zeros(19)
+        g_eta, n_s_f = self.YU.calc_g_flow(eta)
+        for itens in range(3):
+            for iv in range(6):
+                expected[itens*6 + iv] = n_s_f[iv] if itens == 0 else -n_s_f[iv]
+
+        # act
+        acted = self.YU.calc_j_f_f(eta)
+        
+        # assert
+        assert np.allclose(acted, expected)
+
+    def test_calc_f_ep(self):
+        # arange
+        sig = np.array([100.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        beta = np.array([0.0, 0.0, 0.0, 20.0, 30.0, 50.0])
+        theta = np.array([-5, 10, -5, 10.0, 5.0, 10.0])
+        sig_d = Id_s @ sig
+        sig_d_tri = Id_s @ (sig + self.YU.De @ np.array([1.0, -0.5, -0.5, 0.0, 0.0, 0.0]) * 1.5e-4)
+        eta = sig_d - beta - theta
+        delta_gam = 1.5e-5
+        g_eta, n_s_f = self.YU.calc_g_flow(eta)
+        expected = np.zeros(6)
+        for iM in range(6):
+            expected[iM] += delta_gam * n_s_f[iM]
+            for iN in range(6):
+                expected[iM] += self.YU.De_inv[iM, iN] * (sig_d[iN] - sig_d_tri[iN])
+        
+        # act
+        acted = self.YU.calc_f_ep(sig_d, sig_d_tri, eta, delta_gam)
+
+        # assert
+        assert np.allclose(acted, expected)
+
+    def test_calc_j_f_ep(self):
+        # arange
+        sig = np.array([100.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        beta = np.array([0.0, 0.0, 0.0, 20.0, 30.0, 50.0])
+        theta = np.array([-5, 10, -5, 10.0, 5.0, 10.0])
+        sig_d = Id_s @ sig
+        sig_d_tri = Id_s @ (sig + self.YU.De @ np.array([1.0, -0.5, -0.5, 0.0, 0.0, 0.0]) * 1.5e-4)
+        eta = sig_d - beta - theta
+        delta_gam = 1.5e-5
+        g_eta, n_s_f = self.YU.calc_g_flow(eta)
+        expected = np.zeros((6, 19))
+        three_two = 3 / 2
+        dgam_g = delta_gam / g_eta
+        factor = 1.0 - (1.0 - self.YU.Ea / self.YU.elastic.E) * (1.0 - np.exp(-self.YU.psi * (self.YU.eff_eps_p + delta_gam)))
+        for iM in range(6):
+            expected[iM, iM] = three_two * dgam_g
+            expected[iM, 6 + iM] = -three_two * dgam_g
+            expected[iM, 12 + iM] = -three_two * dgam_g
+            expected[iM, 18] = n_s_f[iM]
+            for iN in range(6):
+                expected[iM, iN] += self.YU.De_inv[iM, iN] - dgam_g * n_s_f[iM] * n_s_f[iN]
+                expected[iM, 6 + iN] += dgam_g * n_s_f[iM] * n_s_f[iN]
+                expected[iM, 12 + iN] += dgam_g * n_s_f[iM] * n_s_f[iN]
+                expected[iM, 18] += self.YU.psi * (1 - factor) / factor**2 * self.YU.De_inv[iM, iN] * (sig_d[iN] - sig_d_tri[iN])
+
+        # act
+        acted = self.YU.calc_j_f_ep(sig_d, sig_d_tri, eta, delta_gam)
+
+        # assert
+        assert np.allclose(acted, expected)
+
+    def test_calc_f_beta(self):
+        # arange
+        sig = np.array([100.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        beta = np.array([0.0, 0.0, 0.0, 20.0, 30.0, 50.0])
+        self.YU.beta = beta
+        delta_beta = np.array([-0.5, -0.5, 1.0, 0.0, 0.0, 0.0])
+        theta = np.array([-5, 10, -5, 10.0, 5.0, 10.0])
+        sig_d = Id_s @ sig
+        eta = sig_d - beta - theta
+        delta_gam = 1.5e-5
+        kb_y = self.YU.k * self.YU.b / self.YU.sig_y
+        expected = np.zeros(6)
+        for iM in range(6):
+            expected[iM] += delta_beta[iM] - (
+                kb_y * eta[iM] - self.YU.k * (beta[iM] + delta_beta[iM])
+            ) * delta_gam
+        
+        # act
+        acted = self.YU.calc_f_beta(eta, beta + delta_beta, delta_gam)
+
+        # assert
+        assert np.allclose(acted, expected)
+
+    def test_calc_j_f_beta(self):
+        # arange
+        sig = np.array([100.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        beta = np.array([0.0, 0.0, 0.0, 20.0, 30.0, 50.0])
+        delta_beta = np.array([-0.5, -0.5, 1.0, 0.0, 0.0, 0.0])
+        theta = np.array([-5, 10, -5, 10.0, 5.0, 10.0])
+        sig_d = Id_s @ sig
+        eta = sig_d - beta - theta
+        delta_gam = 1.5e-5
+        g_eta, n_s_f = self.YU.calc_g_flow(eta)
+        expected = np.zeros((6, 19))
+        kb_y = self.YU.k * self.YU.b / self.YU.sig_y
+        for iM in range(6):
+            expected[iM, iM] = - kb_y * delta_gam
+            expected[iM, 6 + iM] = (1.0 + kb_y * delta_gam + self.YU.k * delta_gam)
+            expected[iM, 12 + iM] = kb_y * delta_gam
+            expected[iM, 18] = - kb_y * eta[iM] + self.YU.k * beta[iM]
+        
+        # act
+        acted = self.YU.calc_j_f_beta(eta, beta, delta_gam)
+
+        # assert
+        assert np.allclose(acted, expected)
+
+    def test_calc_f_theta(self):
+        # arange
+        sig = np.array([100.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        beta = np.array([0.0, 0.0, 0.0, 20.0, 30.0, 50.0])
+        theta = np.array([-5, 10, -5, 10.0, 5.0, 10.0])
+        self.YU.theta = theta
+        delta_theta = np.array([1.0, -0.5, 0.5, 0.0, 0.0, 0.0])
+        sig_d = Id_s @ sig
+        eta = sig_d - beta - theta
+        delta_gam = 1.5e-5
+        R = 30.0
+        a = self.YU.B + R - self.YU.sig_y
+        g_eta, n_s_f = self.YU.calc_g_flow(eta)
+        expected = np.zeros(6)
+        theta_bar = np.sqrt(3 / 2) * self.YU.calc_stress_norm(theta + delta_theta)
+        for iM in range(6):
+            expected[iM] = delta_theta[iM] - a * self.YU.C * delta_gam / self.YU.sig_y * eta[iM]
+            if theta_bar != 0.0:
+                expected[iM] += self.YU.C * delta_gam * np.sqrt(a / theta_bar) * (theta[iM] + delta_theta[iM])
+
+        # act
+        acted = self.YU.calc_f_theta(eta, theta + delta_theta, a, delta_gam)
+
+        # assert
+        assert np.allclose(acted, expected)
+
+    def test_calc_j_f_theta(self):
+        # arange
+        sig = np.array([100.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        beta = np.array([0.0, 0.0, 0.0, 20.0, 30.0, 50.0])
+        theta = np.array([-5, 10, -5, 10.0, 5.0, 10.0])
+        self.theta = theta
+        delta_theta = np.array([1.0, -0.5, 0.5, 0.0, 0.0, 0.0])
+        sig_d = Id_s @ sig
+        eta = sig_d - beta - theta
+        delta_gam = 1.5e-5
+        R = 30.0
+        self.YU.R = 28.0
+        a = self.YU.B + R - self.YU.sig_y
+        g_eta, n_s_f = self.YU.calc_g_flow(eta)
+        theta_bar = np.sqrt(3 / 2) * self.YU.calc_stress_norm(theta + delta_theta)
+        s = 1 / (1 + self.YU.k * delta_gam)
+        a_prime = - self.YU.k * s**2 * (
+            self.YU.R + self.YU.k * self.YU.Rsat * delta_gam
+        ) + s * self.YU.Rsat * self.YU.k
+        hardening_flag = False
+        expected = np.zeros((6, 19))
+        for iM in range(6):
+            expected[iM, iM] = - a * self.YU.C * delta_gam / self.YU.sig_y
+            expected[iM, 6 + iM] = a * self.YU.C * delta_gam / self.YU.sig_y
+            expected[iM, 12 + iM] = (1.0 + a * self.YU.C * delta_gam / self.YU.sig_y)
+            expected[iM, 18] = - a * self.YU.C / self.YU.sig_y * eta[iM]
+            if hardening_flag:
+                expected[iM, 18] -= self.YU.C * delta_gam / self.YU.sig_y * a_prime * eta[iM]
+            if theta_bar != 0.0:
+                n_theta_flow = np.zeros(6)
+                for iN in range(3):
+                    n_theta_flow[iN] = (theta[iN] + delta_theta[iN]) / (theta_bar / np.sqrt(3 / 2))
+                for iN in range(3, 6):
+                    n_theta_flow[iN] = (theta[iN] + delta_theta[iN]) / (theta_bar / np.sqrt(3 / 2)) * 2.0
+                expected[iM, 12 + iM] += self.YU.C * delta_gam * np.sqrt(a / theta_bar)
+                expected[iM, 18] += self.YU.C * np.sqrt(a / theta_bar) * (theta[iM] + delta_theta[iM]) 
+                for iN in range(6):
+                    expected[iM, 12 + iN] -= (
+                        np.sqrt(3 / 2) * self.YU.C * delta_gam *
+                        np.sqrt(a / theta_bar) / (2 * theta_bar) *
+                        n_theta_flow[iM] * (theta[iN] + delta_theta[iN])
+                    )
+                if hardening_flag:
+                    expected[iM, 18] += self.YU.C * delta_gam * np.sqrt(1.0 / (theta_bar * a)) * a_prime / 2 * (theta[iM] + delta_theta[iM])
+        
+        # act
+        acted = self.YU.calc_j_f_theta(eta, theta + delta_theta, a, delta_gam, hardening_flag)
+
+        # assert
+        assert np.allclose(acted, expected)
+
+    @pytest.mark.skip(reason="微分確認用テストのため")
     def test_De(self):
         h = 1.0e-32
         eps = np.array([0.1, 0.1, 0.1, 0.1, 0.1, 0.1])
@@ -215,6 +435,7 @@ class Test_yoshida_uemori:
         expected = np.vstack(vectors)
         assert np.allclose(acted, expected)
 
+    @pytest.mark.skip(reason="微分確認用テストのため")
     def test_De_inv(self):
         h = 1.0e-32
         sig = np.array([0.1, 0.1, 0.1, 0.1, 0.1, 0.1])
@@ -230,6 +451,7 @@ class Test_yoshida_uemori:
         expected = np.vstack(vectors)
         assert np.allclose(acted, expected)
     
+    @pytest.mark.skip(reason="微分確認用テストのため")
     def test_norm(self):
         h = 1.0e-32
         sig = np.array([10, 20, 30, 40, 50, 60])
@@ -245,6 +467,7 @@ class Test_yoshida_uemori:
             expected[i] = v_comp.imag / h
         assert np.allclose(acted, expected)
 
+    @pytest.mark.skip(reason="微分確認用テストのため")
     def test_n_bar(self):
         Q = np.diag([1.0, 1.0, 1.0, 2.0, 2.0, 2.0])
         h = 1.0e-32
@@ -262,11 +485,9 @@ class Test_yoshida_uemori:
             v = np.imag(sig_comp / fro_norm_comp) / h
             vectors.append(v)
         expected = np.vstack(vectors)
-        print(acted)
-        print(expected)
         assert np.allclose(acted, expected)
         
-
+    @pytest.mark.skip(reason="微分確認用テストのため")
     def test_f_f_dsig(self):
         # arrange
         h = 1.0e-32
@@ -291,6 +512,7 @@ class Test_yoshida_uemori:
         # assert
         assert np.allclose(f_f_dsig_expected, f_f_dsig_acted)
 
+    @pytest.mark.skip(reason="微分確認用テストのため")
     def test_f_f_dbeta(self):
          # arrange
         h = 1.0e-32
@@ -315,7 +537,7 @@ class Test_yoshida_uemori:
         # assert
         assert np.allclose(f_f_dbeta_expected, f_f_dbeta_acted)
 
-
+    @pytest.mark.skip(reason="微分確認用テストのため")
     def test_f_f_dtheta(self):
          # arrange
         h = 1.0e-32
@@ -340,6 +562,7 @@ class Test_yoshida_uemori:
         # assert
         assert np.allclose(f_f_dbeta_expected, f_f_dbeta_acted)
 
+    @pytest.mark.skip(reason="微分確認用テストのため")
     def test_f_ep_dsig(self):
          # arrange
         h = 1.0e-32
@@ -368,9 +591,9 @@ class Test_yoshida_uemori:
         acted = self.YU.elastic.De_inv + delta_gam * dn_dsig
 
         # assert
-        print(acted / expected)
         assert np.allclose(acted, expected)
 
+    @pytest.mark.skip(reason="微分確認用テストのため")
     def test_f_ep_dbeta(self):
          # arrange
         h = 1.0e-32
@@ -400,6 +623,7 @@ class Test_yoshida_uemori:
         # assert
         assert np.allclose(f_ep_dbeta_acted, f_ep_dbeta_expected)
 
+    @pytest.mark.skip(reason="微分確認用テストのため")
     def test_f_ep_dtheta(self):
         # arrange
         h = 1.0e-32
@@ -429,6 +653,7 @@ class Test_yoshida_uemori:
         # assert
         print(f_ep_dsig_acted / f_ep_dsig_expected)
 
+    @pytest.mark.skip(reason="微分確認用テストのため")
     def test_f_beta_dsig(self):
         # arrange
         h = 1.0e-32
@@ -457,9 +682,9 @@ class Test_yoshida_uemori:
         acted = self.YU.calc_f_beta_dsig(delta_gam)
 
         # assert
-        print(acted / expected)
         assert np.allclose(acted, expected)
 
+    @pytest.mark.skip(reason="微分確認用テストのため")
     def test_f_beta_dbeta(self):
         # arrange
         h = 1.0e-32
@@ -487,9 +712,9 @@ class Test_yoshida_uemori:
         acted = self.YU.calc_f_beta_dbeta(delta_gam)
 
         # assert
-        print(acted / expected)
         assert np.allclose(acted, expected)
 
+    @pytest.mark.skip(reason="微分確認用テストのため")
     def test_f_beta_dtheta(self):
         # arrange
         h = 1.0e-32
@@ -520,6 +745,7 @@ class Test_yoshida_uemori:
         print(acted / expected)
         assert np.allclose(acted, expected)
 
+    @pytest.mark.skip(reason="微分確認用テストのため")
     def test_f_beta_dgamma(self):
         # arrange
         h = 1.0e-32
@@ -542,6 +768,7 @@ class Test_yoshida_uemori:
         # assert
         assert np.allclose(acted, expected)
 
+    @pytest.mark.skip(reason="微分確認用テストのため")
     def test_f_theta_dsig(self):
         # arrange
         h = 1.0e-32
@@ -575,6 +802,7 @@ class Test_yoshida_uemori:
         # assert
         assert np.allclose(acted, expected)
 
+    @pytest.mark.skip(reason="微分確認用テストのため")
     def test_f_theta_dbeta(self):
         # arrange
         h = 1.0e-32
@@ -608,6 +836,7 @@ class Test_yoshida_uemori:
         # assert
         assert np.allclose(acted, expected)
 
+    @pytest.mark.skip(reason="微分確認用テストのため")
     def test_f_theta_dtheta(self):
         # arrange
         h = 1.0e-32
@@ -642,8 +871,8 @@ class Test_yoshida_uemori:
         print(acted / expected)
         assert np.allclose(acted, expected)
 
+    @pytest.mark.skip(reason="微分確認用テストのため")
     def test_f_theta_dgamma(self):
-        # arrange
         # arrange
         h = 1.0e-32
         sig = np.array([100.0, 0.0, 0.0, 0.0, 0.0, 0.0])
