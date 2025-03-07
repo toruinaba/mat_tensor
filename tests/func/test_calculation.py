@@ -88,7 +88,4 @@ calculator.goal_sig = np.array([0.0, 0.0, 0.0, -275.0, 0.0, 0.0])
 calculator.calculate_steps(is_init=False)
 calculator.goal_sig = np.array([0.0, 0.0, 0.0, 300.0, 0.0, 0.0])
 calculator.calculate_steps(is_init=False)
-
-
-
 """

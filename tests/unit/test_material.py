@@ -199,7 +199,7 @@ class Test_chaboche_n:
 
 
 class Test_yoshida_uemori:
-    YU = Yoshida_uemori(Elastic(205000.0, 0.3), 100.0, 160.0, 500.0, 120.0, 20.0, 15.0, 0.5, 150000.0, 30.0)
+    YU = Yoshida_uemori(Elastic(205000.0, 0.3), 124.0,168.0,500.0,190.0,12.0,9.0,0.5,205000.0,0.0)
 
     def test_calc_f_f(self):
         # arange
@@ -418,6 +418,78 @@ class Test_yoshida_uemori:
 
         # assert
         assert np.allclose(acted, expected)
+
+    def test_calc_Dep(self):
+        # arange
+        sig = np.array([100.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        beta = np.array([0.0, 0.0, 0.0, 20.0, 30.0, 50.0])
+        theta = np.array([-5, 10, -5, 10.0, 5.0, 10.0])
+        sig_d = Id_s @ sig
+        eta = sig_d - beta - theta
+        delta_gam = 1.5e-5
+        R = 30.0
+        self.YU.R_i = R
+        a = self.YU.B + R - self.YU.sig_y
+        g_eta, n_s_f = self.YU.calc_g_flow(eta)
+        theta_bar = np.sqrt(3 / 2) * self.YU.calc_stress_norm(theta)
+        n_D_n = 0.0
+        n_s = 0.0
+        D_n = np.zeros(6)
+        expected = self.YU.De
+        for iM in range(6):
+            n_s += n_s_f[iM] * (
+                (self.YU.C * a + self.YU.k * self.YU.b) / self.YU.sig_y * eta[iM] -
+                (self.YU.C * np.sqrt(a / theta_bar) * theta[iM] + self.YU.k * beta[iM])
+            )
+            for iN in range(6):
+                n_D_n += n_s_f[iM] * self.YU.De[iM, iN] * n_s_f[iN]
+                D_n[iM] += self.YU.De[iM, iN] * n_s_f[iN]
+        
+        for iM in range(6):
+            for iN in range(6):
+                expected[iM, iN] -= D_n[iM] * D_n[iN] / (n_D_n + n_s)
+        
+        # act
+        acted = self.YU.calc_Dep(sig_d, delta_gam, beta, theta, True)
+
+        # assert
+        assert np.allclose(acted, expected)
+    
+    def test_Params(self):
+        # arange
+        sig_d = np.array([-40.9877, -40.9877, 81.97541, 0.0, 0.0, 0.0])
+        sig_d_tri = np.array([-54.64563, -54.64563, 109.2913, 0.0, 0.0, 0.0])
+        theta = np.zeros(6)
+        beta = np.zeros(6)
+        eta = sig_d - beta - theta
+        a = self.YU.B - self.YU.sig_y
+        g, flow = self.YU.calc_g(eta)
+        f = self.YU.calc_f_vector(sig_d, sig_d_tri, beta, theta, a, 0.0)
+        #print(f)
+        j = self.YU.calc_jacobian(sig_d, sig_d_tri, eta, beta, theta, a, 0.0, True)
+        print(j)
+
+    def test_Params2(self):
+        # arange
+        sig_d = np.array([-42.46252, -42.46252, 84.92504, 0.0, 0.0, 0.0])
+        theta = np.array([-1.123633, -1.123633, 2.247265, 0.0, 0.0, 0.0])
+        beta = np.array([-0.5552336e-2, -0.5552336e-2,0.1110467e-1, 0.0, 0.0, 0.0])
+        eta = sig_d - beta - theta
+        delta_gam = 1.545175221869813e-4
+        s = 1 / (1 + self.YU.k * delta_gam)
+        R = s * (0.0 + self.YU.k*self.YU.Rsat*delta_gam)
+        a = self.YU.B + R - self.YU.sig_y
+        Dep = self.YU.calc_Dep(sig_d, delta_gam, beta, theta, True)
+        eps = np.array([-0.5997361e-4, -0.5997361e-4, 0.1998601e-3, 0.0, 0.0, 0.0])
+        print(Dep)
+        print(Dep @ eps)
+
+    def test_Params3(self):
+        # arange
+        delta_gam = 1.545175221869813e-4
+        s = 1 / (1 + self.YU.k*delta_gam)
+        R = s * (0.0 + self.YU.k*self.YU.Rsat*delta_gam)
+        a = self.YU.B + R - self.YU.sig_y
 
     @pytest.mark.skip(reason="微分確認用テストのため")
     def test_De(self):
