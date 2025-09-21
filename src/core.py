@@ -1,12 +1,18 @@
 from copy import deepcopy
 import numpy as np
+import logging
 from src.util import IxI, Id_s
 from src.material import Material_expression_base
+from src.error import NotConvergedError
+
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 class Calculator3D:
     TOL = 1.0e-06
-    NW_I = 100
+    NW_I = 20
     TOTAL_TIME = 1.0
     MAX_INCREMENT = 1000
 
@@ -38,30 +44,29 @@ class Calculator3D:
     def calc_increment(self, goal):
         f_sig = goal - self.sig
         del_eps = np.linalg.inv(self.material.elastic.De) @ f_sig
-        print(f"Goal sig: {goal}")
-        print(f"Current sig: {self.sig}")
-        print(f"Initial dela eps: {del_eps}")
-        for itr in range(self.NW_I):
-            print("-"*80)
-            print(f"\nIteration: {itr+1}\n")
+        logger.info(f"Goal sig: {goal}")
+        logger.info(f"Current sig: {self.sig}")
+        logger.debug(f"Initial dela eps: {del_eps}")
+        for s_itr in range(self.NW_I):
+            logger.debug(f"Iteration: {s_itr+1}")
             sig_i, Dep = self.material.integrate_stress(self.eps, del_eps)
-            print(f"Corrected sig: {sig_i}")
+            logger.debug(f"Corrected sig: {sig_i}")
             sig_diff = goal - sig_i
             sig_diff_norm = self.calc_stress_norm(sig_diff)
-            print(f"Difference norm: {sig_diff_norm}")
+            logger.debug(f"Difference norm: {sig_diff_norm}")
             if np.sqrt(3 / 2) * sig_diff_norm / self.material.yield_stress < self.TOL:
                 self.sig = goal
                 self.eps = self.eps + del_eps
                 self.material.update()
-                print(f"Stress integration converged: itr.{itr+1}")
+                logger.info(f"Stress integration converged: itr.{s_itr+1}")
                 break
             else:
-                print(f"itr.{itr+1}")
+                logger.debug(f"itr.{s_itr+1}")
                 d_del_eps = np.linalg.inv(Dep) @ sig_diff
                 del_eps += d_del_eps
-                print(f"Updated delta eps: {del_eps}")
-            if itr == self.NW_I - 1:
-                raise ValueError(f"Not converged this iteration.")
+                logger.debug(f"Updated delta eps: {del_eps}")
+        else:
+            raise NotConvergedError("Stress integration isn't converged")
 
     def calculate_steps(self, is_init=True):
         counter = 0
@@ -73,11 +78,9 @@ class Calculator3D:
         self.current_inc = 0
         while self.current_time < 1.0:
             self.current_inc += 1
-            print("="*80)
-            print(f"\nIncrement {self.current_inc}\n")
-            print("="*80)
+            logger.info(f"Increment {self.current_inc}")
             attempt_time = self.current_time + self.current_delta_t if self.current_time + self.current_delta_t < 1.0 else 1.0
-            print(f"Attempt time: {attempt_time}")
+            logger.info(f"Attempt time: {attempt_time}")
             goal = attempt_time / self.TOTAL_TIME * (self.goal_sig - initial_sig) + initial_sig
             try:
                 self.calc_increment(goal)
@@ -86,14 +89,15 @@ class Calculator3D:
                 if counter == 4:
                     self.current_delta_t = self.current_delta_t * 1.25 if self.current_delta_t * 1.25 < self.max_delta_t else self.max_delta_t
                     counter = 0
-            except ValueError:
+            except NotConvergedError:
                 if self.current_delta_t < self.min_delta_t:
-                    ValueError("Not converged")
+                    raise NotConvergedError("Minimum time increment is exceeded.")
+                logger.warning("Not converged. Try smaller time increment.")
                 self.current_delta_t *= 0.25
             if self.current_inc >= self.MAX_INCREMENT:
-                raise ValueError("Not converged")
+                raise NotConvergedError("Maximum increment is exceeded.")
             self.output.add_data(self.sig, self.eps, self.material.eps_p, self.material.eff_eps_p)
-            print(f"Ended time: {self.current_time}")
+            logger.info(f"Ended time: {self.current_time}")
 
 
 class Output_data:

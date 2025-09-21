@@ -1,5 +1,10 @@
 import numpy as np
+import logging
 from src.util import I, Is, Id, Id_s, IxI
+from src.error import NotConvergedError
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 class Elastic:
     def __init__(self, E: float, n: float):
@@ -68,14 +73,13 @@ class Material_expression_base:
         raise NotImplementedError()
     
     def return_mapping(self, sig_d_tri):
-        print("-"*80)
         del_gam = 0.0
         f_ip1 = self.calc_f_ip1(sig_d_tri, del_gam)
         f_ip1_prime = self.calc_f_ip1_prime(sig_d_tri, del_gam)
         if f_ip1 < 0.0:
-            print("Plastic behavior")
+            logger.debug("Plastic behavior")
             for inew in range(self.RM_I):
-                print(f"Newton iteration {inew+1}")
+                logger.debug(f"Newton iteration {inew+1}")
                 d_del_gam = f_ip1 / f_ip1_prime
                 del_gam -= d_del_gam
                 f_ip1 = self.calc_f_ip1(sig_d_tri, del_gam)
@@ -83,13 +87,13 @@ class Material_expression_base:
                 if abs(f_ip1) < self.TOL:
                     if del_gam < 0.0:
                         raise ValueError("Delta gamma is negative value.")
-                    print(f"Return map converged itr.{inew+1}")
-                    print(f"Delta gamma: {del_gam}")
+                    logger.info(f"Return map converged itr.{inew+1}")
+                    logger.debug(f"Delta gamma: {del_gam}")
                     break
-                if inew == self.RM_I - 1:
-                    raise ValueError("Return map isn't converged")
+            else:
+                raise NotConvergedError("Return map isn't converged")
         else:
-            print("Elastic behavior")
+            logger.debug("Elastic behavior")
         q_tri, n_bar = self.calc_tri(sig_d_tri, del_gam)
         return q_tri, del_gam, n_bar
 
@@ -100,7 +104,7 @@ class Material_expression_base:
         sig_d_tri = Id_s @ sig_tri
 
         q_tri, del_gam, n_bar = self.return_mapping(sig_d_tri)
-        print(f"F: {self.calc_f_ip1(sig_d_tri, del_gam)}")
+        logger.debug(f"F: {self.calc_f_ip1(sig_d_tri, del_gam)}")
         self.update_i(del_gam, n_bar)
         eps_e_i = eps_tri - self.eps_p_i
         sig_e = self.elastic.De @ eps_e_i
@@ -671,7 +675,7 @@ class Chaboche_n(Material_expression_base):
 
 class Yoshida_uemori:
     TOL = 1.0e-06
-    RM_I = 10
+    RM_I = 20
     Q = np.diag([1.0, 1.0, 1.0, 2.0, 2.0, 2.0])
 
     def __init__(self, elastic: Elastic, sig_y: float, B, C, Rsat, k, b, h, Ea, psi):
@@ -707,6 +711,10 @@ class Yoshida_uemori:
         sig_r = sig * r
         return np.sqrt(sig @ sig_r)
 
+    @staticmethod
+    def calc_De_factor(Ea, E, psi, eff_eps_p):
+        return 1.0 - (1.0 - Ea / E) * (1.0 - np.exp(-psi * eff_eps_p))
+
     @property
     def yield_stress(self):
         return self.sig_y
@@ -717,7 +725,7 @@ class Yoshida_uemori:
 
     @property
     def De_factor(self):
-        return 1.0 - (1.0 - self.elastic.E / self.Ea) * (1.0 - np.exp(-self.psi * self.eff_eps_p))
+        return self.calc_De_factor(self.Ea, self.elastic.E, self.psi, self.eff_eps_p)
 
     @property
     def De(self):
@@ -725,7 +733,7 @@ class Yoshida_uemori:
 
     @property
     def De_inv(self):
-        return np.linalg.inv(self.De)
+        return (1 / self.De_factor) * self.elastic.De_inv
 
     def initialize(self):
         self.eps_p = np.zeros(6)
@@ -750,7 +758,7 @@ class Yoshida_uemori:
         g_stag = self.calc_g_stag(xi_n, self.r)
         g_stag_flow = (self.Q @ xi_n) @ delta_beta
         if g_stag > -self.TOL and g_stag_flow > -self.TOL:
-            print("Hardening evolution")
+            logger.info("Hardening evolution")
             xi = self.beta - self.q
             if abs(np.sqrt(self.calc_g_stag(xi, self.r))) < self.TOL:
                 delta_beta_s = delta_beta
@@ -778,7 +786,7 @@ class Yoshida_uemori:
             self.R_i = 1 / (1 + self.k * delta_gam) * (self.R + self.k * self.Rsat * delta_gam)
             xi_last = self.beta_i - self.q_i
         else:
-            print("Hardening stagnation")
+            logger.info("Hardening stagnation")
             self.q_i = self.q
             self.r_i = self.r
             self.R_i = self.R
@@ -832,12 +840,13 @@ class Yoshida_uemori:
 
     def calc_j_f_ep(self, sig_d, sig_d_tri, eta, delta_gam):
         g_eta, n_s_f = self.calc_g_flow(eta)
+        updated_factor = self.calc_De_factor(self.Ea, self.elastic.E, self.psi, self.eff_eps_p + delta_gam)
         dn_dsig = 3 /(2 * g_eta) * (I - np.outer(n_s_f / np.sqrt(3 / 2), n_s_f / np.sqrt(3 / 2)))
-        f_ep_dsig = (self.De_inv + delta_gam * dn_dsig)
+        f_ep_dsig = ((1 / updated_factor) * self.elastic.De_inv + delta_gam * dn_dsig)
         f_ep_dbeta = - delta_gam * dn_dsig
         f_ep_dtheta = - delta_gam * dn_dsig
         factor = 1.0 - (1 - self.Ea / self.elastic.E) * (1 - np.exp(-self.psi * (self.eff_eps_p + delta_gam)))
-        f_ep_dgamma = self.psi * (1 - factor) / factor**2 * self.De_inv @ (sig_d - sig_d_tri) + n_s_f
+        f_ep_dgamma = self.psi * (factor - self.Ea / self.elastic.E) / factor**2 * self.elastic.De_inv @ (sig_d - sig_d_tri) + n_s_f
         matrices = (f_ep_dsig, f_ep_dbeta, f_ep_dtheta, np.matrix(f_ep_dgamma).transpose())
         return np.hstack(matrices)
 
@@ -932,14 +941,13 @@ class Yoshida_uemori:
         return delta_sig, delta_beta, delta_theta, delta_gam
 
     def return_mapping(self, sig_d, sig_d_tri):
-        print("-"*80)
         delta_vector = np.zeros(19)
         delta_gam_i = 0.0
         eta_tri = sig_d_tri - self.theta - self.beta
         f_tri = self.calc_f_f(eta_tri)
         hardening_flag = True
         if f_tri > 0.0:
-            print("Plastic behavior")
+            logger.debug("Plastic behavior")
             sig_d_i = sig_d
             beta_i = self.beta
             theta_i = self.theta
@@ -948,7 +956,7 @@ class Yoshida_uemori:
             f_vector = self.calc_f_vector(sig_d_i, sig_d_tri, beta_i, theta_i, a_i, delta_gam_i)
             jacobian = self.calc_jacobian(sig_d_i, sig_d_tri, eta_i, beta_i, theta_i, a_i, delta_gam_i, hardening_flag)
             for inew in range(self.RM_I):
-                print(f"Newton iteration {inew+1}")
+                logger.debug(f"Newton iteration {inew+1}")
                 d_delta_vector = np.linalg.solve(jacobian, f_vector)
                 delta_vector -= np.array(d_delta_vector).flatten()
                 delta_sig, delta_beta, delta_theta, delta_gam_i = self.divide_delta_vector(delta_vector)
@@ -971,13 +979,14 @@ class Yoshida_uemori:
                 if np.linalg.norm(f_vector) < self.TOL:
                     if delta_gam_i < 0.0:
                         raise ValueError("Delta gamma is negative value.")
-                    print(f"Return map converged itr.{inew+1}")
-                    print(f"Delta gamma: {delta_gam_i}")
+                    logger.info(f"Return map converged itr.{inew+1}")
+                    logger.debug(f"Delta gamma: {delta_gam_i}")
                     break
-                if inew == self.RM_I - 1:
-                    raise ValueError("Return map isn't converged")
+            else:
+                logger.warning("Return mapping isn't converged.")
+                raise NotConvergedError
         else:
-            print("Elastic behavior")
+            logger.debug("Elastic behavior")
         return delta_vector, hardening_flag
 
     def calc_Dep(self, sig_d, delta_gam, beta, theta, hardening_flag):
@@ -990,11 +999,12 @@ class Yoshida_uemori:
             a = self.B + self.R_i - self.sig_y
         else:
             a = self.B + self.R - self.sig_y
-        D_n_n_D = self.De @ (np.outer(m, m) @ self.De)
-        n_D_n = m @ (self.De @ m)
+        factor = self.calc_De_factor(self.Ea, self.elastic.E, self.psi, self.eff_eps_p + delta_gam)
+        D_n_n_D = factor**2 * self.elastic.De @ (np.outer(m, m) @ self.elastic.De)
+        n_D_n = factor * m @ (self.elastic.De @ m)
         S = (self.C * a + self.k * self.b) / self.sig_y * eta - (self.C * np.sqrt(a / theta_bar) * theta + self.k * beta)
         n_s = m @ S
-        return self.De - D_n_n_D / (n_D_n + n_s)
+        return factor * self.elastic.De - D_n_n_D / (n_D_n + n_s)
 
     def integrate_stress(self, eps, del_eps):
         eps_tri = eps + del_eps
