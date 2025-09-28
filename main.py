@@ -1,6 +1,6 @@
 import numpy as np
-from src.material import Elastic, AF_kinematic, Chaboche, Yoshida_uemori
-from src.core import Calculator3D
+from src.solid.materials import Elastic, AF_kinematic, Chaboche, Yoshida_uemori
+from src.solid.calculator import Calculator3D
 
 E = 206000.0
 n = 0.3

@@ -1,6 +1,6 @@
 import numpy as np
 import logging
-from src.util import I, Is, Id, Id_s, IxI
+from src.solid.utils import I, Is, Id, Id_s, IxI
 from src.error import NotConvergedError
 
 logging.basicConfig(level=logging.INFO)

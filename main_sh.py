@@ -1,6 +1,7 @@
 from src.shell.materials import Elastic_sh, Linear_isotropic_sh, Linear_kinematic_sh, Voce_isotropic_sh, AF_kinematic_sh, Yoshida_uemori_sh
-from src.material import Elastic, Linear_isotropic, Linear_kinematic, Voce_isotropic, AF_kinematic, Yoshida_uemori
-from src.core import Calculator3D, Calculator3D_sh
+from src.solid.materials import Elastic, Linear_isotropic, Linear_kinematic, Voce_isotropic, AF_kinematic, Yoshida_uemori
+from src.solid.calculator import Calculator3D
+from src.shell.calculator import Calculator3D_sh
 import numpy as np
 
 E = 205000.0

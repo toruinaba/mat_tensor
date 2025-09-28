@@ -7,7 +7,7 @@ from src.axisymmetry.materials import (
     AF_kinematic_ax,
     Yoshida_uemori_ax
 )
-from src.core import Calculator3D_ax
+from src.axisymmetry.calculator import Calculator3D_ax
 
 E = 206000.0
 n = 0.3
