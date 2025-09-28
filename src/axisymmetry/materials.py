@@ -8,6 +8,8 @@ logger = logging.getLogger(__name__)
 
 
 class Elastic_ax:
+    A = 1
+
     def __init__(self, E, n):
         self.E = E
         self.n = n
@@ -22,7 +24,7 @@ class Elastic_ax:
 
     @property
     def De(self):
-        return 2 * self.G * Is_ax + 1 * (self.K - 2 / 3 * self.G) * IxI_ax
+        return 2 * self.G * Is_ax + self.A * (self.K - 2 / 3 * self.G) * IxI_ax
 
     @property
     def De_inv(self):
