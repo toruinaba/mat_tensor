@@ -6,6 +6,7 @@ from src.error import NotConvergedError
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
 class Elastic:
     def __init__(self, E: float, n: float):
         self.E = E
@@ -71,7 +72,7 @@ class Material_expression_base:
 
     def calc_Dep(self):
         raise NotImplementedError()
-    
+
     def return_mapping(self, sig_d_tri):
         del_gam = 0.0
         f_ip1 = self.calc_f_ip1(sig_d_tri, del_gam)
@@ -128,7 +129,9 @@ class Linear_isotropic(Material_expression_base):
 
     def update_i(self, del_gam, n_bar):
         self.r_i = self.r + self.h * del_gam
-        delta_eps_p = np.sqrt(3 / 2) * del_gam * n_bar * np.array([1.0, 1.0, 1.0, 2.0, 2.0, 2.0])
+        delta_eps_p = (
+            np.sqrt(3 / 2) * del_gam * n_bar * np.array([1.0, 1.0, 1.0, 2.0, 2.0, 2.0])
+        )
         self.eps_p_i = self.eps_p + delta_eps_p
         self.eff_eps_p_i = self.eff_eps_p + del_gam
 
@@ -143,21 +146,29 @@ class Linear_isotropic(Material_expression_base):
 
     def calc_f_ip1(self, sig_d: np.ndarray, del_gam: float):
         q_tri, n_bar = self.calc_tri(sig_d, del_gam)
-        return self.sig_y + (self.r + self.h * del_gam) + 3 * self.elastic.G * del_gam - q_tri
+        return (
+            self.sig_y
+            + (self.r + self.h * del_gam)
+            + 3 * self.elastic.G * del_gam
+            - q_tri
+        )
 
     def calc_f_ip1_prime(self, sig_d: np.ndarray, del_gam: float):
         return 3 * self.elastic.G + self.h
 
     def calc_Dep(self, sig_d: np.ndarray, del_gam: float):
-         q_tri, n_bar = self.calc_tri(sig_d, del_gam)
-         if del_gam == 0.0:
-             return self.elastic.De
-         f_ip1_prime = self.calc_f_ip1_prime(sig_d, del_gam)
-         return (
-             self.elastic.De -
-             6 * self.elastic.G**2 * del_gam / q_tri * Id +
-             6 * self.elastic.G**2 * (del_gam / q_tri - 1 / f_ip1_prime) * np.outer(n_bar, n_bar)
-         )
+        q_tri, n_bar = self.calc_tri(sig_d, del_gam)
+        if del_gam == 0.0:
+            return self.elastic.De
+        f_ip1_prime = self.calc_f_ip1_prime(sig_d, del_gam)
+        return (
+            self.elastic.De
+            - 6 * self.elastic.G**2 * del_gam / q_tri * Id
+            + 6
+            * self.elastic.G**2
+            * (del_gam / q_tri - 1 / f_ip1_prime)
+            * np.outer(n_bar, n_bar)
+        )
 
 
 class Linear_kinematic(Material_expression_base):
@@ -174,7 +185,9 @@ class Linear_kinematic(Material_expression_base):
         self.eff_eps_p_i = 0.0
 
     def update_i(self, del_gam, n_bar):
-        delta_eps_p = np.sqrt(3 / 2) * del_gam * n_bar * np.array([1.0, 1.0, 1.0, 2.0, 2.0, 2.0])
+        delta_eps_p = (
+            np.sqrt(3 / 2) * del_gam * n_bar * np.array([1.0, 1.0, 1.0, 2.0, 2.0, 2.0])
+        )
         delta_alpha = 2 / 3 * delta_eps_p * self.h
         self.alpha_i = self.alpha + delta_alpha
         self.eps_p_i = self.eps_p + delta_eps_p
@@ -198,15 +211,18 @@ class Linear_kinematic(Material_expression_base):
         return 3 * self.elastic.G + self.h
 
     def calc_Dep(self, sig_d: np.ndarray, del_gam: float):
-         q_tri, n_bar = self.calc_tri(sig_d, del_gam)
-         if del_gam == 0.0:
-             return self.elastic.De
-         f_ip1_prime = self.calc_f_ip1_prime(sig_d, del_gam)
-         return (
-             self.elastic.De -
-             6 * self.elastic.G**2 * del_gam / q_tri * Id +
-             6 * self.elastic.G**2 * (del_gam / q_tri - 1 / f_ip1_prime) * np.outer(n_bar, n_bar)
-         )
+        q_tri, n_bar = self.calc_tri(sig_d, del_gam)
+        if del_gam == 0.0:
+            return self.elastic.De
+        f_ip1_prime = self.calc_f_ip1_prime(sig_d, del_gam)
+        return (
+            self.elastic.De
+            - 6 * self.elastic.G**2 * del_gam / q_tri * Id
+            + 6
+            * self.elastic.G**2
+            * (del_gam / q_tri - 1 / f_ip1_prime)
+            * np.outer(n_bar, n_bar)
+        )
 
 
 class Voce_isotropic(Material_expression_base):
@@ -230,7 +246,9 @@ class Voce_isotropic(Material_expression_base):
     def update_i(self, del_gam, n_bar):
         theta = 1 / (1 + self.b * del_gam)
         self.r_i = theta * (self.r + self.b * self.Q * del_gam)
-        delta_eps_p = np.sqrt(3 / 2) * del_gam * n_bar * np.array([1.0, 1.0, 1.0, 2.0, 2.0, 2.0])
+        delta_eps_p = (
+            np.sqrt(3 / 2) * del_gam * n_bar * np.array([1.0, 1.0, 1.0, 2.0, 2.0, 2.0])
+        )
         self.eps_p_i = self.eps_p + delta_eps_p
         self.eff_eps_p_i = self.eff_eps_p + del_gam
 
@@ -246,26 +264,40 @@ class Voce_isotropic(Material_expression_base):
     def calc_f_ip1(self, sig_d: np.ndarray, del_gam: float):
         q_tri, n_bar = self.calc_tri(sig_d, del_gam)
         theta = 1 / (1 + self.b * del_gam)
-        return self.sig_y + theta * (self.r + self.b * self.Q * del_gam) + 3 * self.elastic.G * del_gam - q_tri
+        return (
+            self.sig_y
+            + theta * (self.r + self.b * self.Q * del_gam)
+            + 3 * self.elastic.G * del_gam
+            - q_tri
+        )
 
     def calc_f_ip1_prime(self, sig_d: np.ndarray, del_gam: float):
         theta = 1 / (1 + self.b * del_gam)
-        return 3 * self.elastic.G - self.b * theta**2 * (self.r + self.b * self.Q * del_gam) + theta * self.b * self.Q
+        return (
+            3 * self.elastic.G
+            - self.b * theta**2 * (self.r + self.b * self.Q * del_gam)
+            + theta * self.b * self.Q
+        )
 
     def calc_Dep(self, sig_d: np.ndarray, del_gam: float):
-         q_tri, n_bar = self.calc_tri(sig_d, del_gam)
-         if del_gam == 0.0:
-             return self.elastic.De
-         f_ip1_prime = self.calc_f_ip1_prime(sig_d, del_gam)
-         return (
-             self.elastic.De -
-             6 * self.elastic.G**2 * del_gam / q_tri * Id +
-             6 * self.elastic.G**2 * (del_gam / q_tri - 1 / f_ip1_prime) * np.outer(n_bar, n_bar)
-         )
+        q_tri, n_bar = self.calc_tri(sig_d, del_gam)
+        if del_gam == 0.0:
+            return self.elastic.De
+        f_ip1_prime = self.calc_f_ip1_prime(sig_d, del_gam)
+        return (
+            self.elastic.De
+            - 6 * self.elastic.G**2 * del_gam / q_tri * Id
+            + 6
+            * self.elastic.G**2
+            * (del_gam / q_tri - 1 / f_ip1_prime)
+            * np.outer(n_bar, n_bar)
+        )
 
 
 class Voce_isotropic_n(Material_expression_base):
-    def __init__(self, elastic: Elastic, sig_y: float, Qs: list[float], bs: list[float]):
+    def __init__(
+        self, elastic: Elastic, sig_y: float, Qs: list[float], bs: list[float]
+    ):
         super().__init__(elastic, sig_y)
         self.Qs = Qs
         self.bs = bs
@@ -298,7 +330,9 @@ class Voce_isotropic_n(Material_expression_base):
         for n in range(self.number):
             theta_n = 1 / (1 + self.bs[n] * del_gam)
             self.r_is[n] = theta_n * (self.rs[n] + self.bs[n] * self.Qs[n] * del_gam)
-        delta_eps_p = np.sqrt(3 / 2) * del_gam * n_bar * np.array([1.0, 1.0, 1.0, 2.0, 2.0, 2.0])
+        delta_eps_p = (
+            np.sqrt(3 / 2) * del_gam * n_bar * np.array([1.0, 1.0, 1.0, 2.0, 2.0, 2.0])
+        )
         self.eps_p_i = self.eps_p + delta_eps_p
         self.eff_eps_p_i = self.eff_eps_p + del_gam
 
@@ -324,19 +358,27 @@ class Voce_isotropic_n(Material_expression_base):
         G_prime = 0.0
         for n in range(self.number):
             theta_n = 1 / (1 + self.bs[n] * del_gam)
-            G_prime += -self.bs[n] * theta_n**2 * (self.rs[n] + self.bs[n] * self.Qs[n] * del_gam) + theta_n * self.bs[n] * self.Qs[n]
+            G_prime += (
+                -self.bs[n]
+                * theta_n**2
+                * (self.rs[n] + self.bs[n] * self.Qs[n] * del_gam)
+                + theta_n * self.bs[n] * self.Qs[n]
+            )
         return 3 * self.elastic.G + G_prime
 
     def calc_Dep(self, sig_d: np.ndarray, del_gam: float):
-         q_tri, n_bar = self.calc_tri(sig_d, del_gam)
-         if del_gam == 0.0:
-             return self.elastic.De
-         f_ip1_prime = self.calc_f_ip1_prime(sig_d, del_gam)
-         return (
-             self.elastic.De -
-             6 * self.elastic.G**2 * del_gam / q_tri * Id +
-             6 * self.elastic.G**2 * (del_gam / q_tri - 1 / f_ip1_prime) * np.outer(n_bar, n_bar)
-         )
+        q_tri, n_bar = self.calc_tri(sig_d, del_gam)
+        if del_gam == 0.0:
+            return self.elastic.De
+        f_ip1_prime = self.calc_f_ip1_prime(sig_d, del_gam)
+        return (
+            self.elastic.De
+            - 6 * self.elastic.G**2 * del_gam / q_tri * Id
+            + 6
+            * self.elastic.G**2
+            * (del_gam / q_tri - 1 / f_ip1_prime)
+            * np.outer(n_bar, n_bar)
+        )
 
 
 class AF_kinematic(Material_expression_base):
@@ -354,7 +396,9 @@ class AF_kinematic(Material_expression_base):
         self.eff_eps_p_i = 0.0
 
     def update_i(self, del_gam, n_bar):
-        delta_eps_p = np.sqrt(3 / 2) * del_gam * np.diag([1.0, 1.0, 1.0, 2.0, 2.0, 2.0]) @ n_bar
+        delta_eps_p = (
+            np.sqrt(3 / 2) * del_gam * np.diag([1.0, 1.0, 1.0, 2.0, 2.0, 2.0]) @ n_bar
+        )
         theta = 1 / (1 + self.k * del_gam)
         self.alpha_i = theta * (self.alpha + np.sqrt(2 / 3) * self.C * del_gam * n_bar)
         self.eps_p_i = self.eps_p + delta_eps_p
@@ -374,17 +418,19 @@ class AF_kinematic(Material_expression_base):
     def calc_f_ip1(self, sig_d: np.ndarray, del_gam: float):
         q_tri, n_bar = self.calc_tri(sig_d, del_gam)
         theta = 1 / (1 + self.k * del_gam)
-        return self.sig_y + 3 * self.elastic.G * del_gam + self.C * theta * del_gam - q_tri
+        return (
+            self.sig_y + 3 * self.elastic.G * del_gam + self.C * theta * del_gam - q_tri
+        )
 
     def calc_f_ip1_prime(self, sig_d: np.ndarray, del_gam: float):
         q_tri, n_bar = self.calc_tri(sig_d, del_gam)
         theta = 1 / (1 + self.k * del_gam)
         dotted = n_bar @ self.alpha
         return (
-            3 * self.elastic.G +
-            self.C * theta -
-            self.k * self.C * theta**2 * del_gam
-            - np.sqrt(3/2) * self.k * theta**2 * dotted
+            3 * self.elastic.G
+            + self.C * theta
+            - self.k * self.C * theta**2 * del_gam
+            - np.sqrt(3 / 2) * self.k * theta**2 * dotted
         )
 
     def calc_Dep(self, sig_d: np.ndarray, del_gam: float):
@@ -395,17 +441,29 @@ class AF_kinematic(Material_expression_base):
         theta = 1 / (1 + self.k * del_gam)
         N4d = I - np.outer(n_bar, n_bar)
         N4d_alpha = N4d @ self.alpha
-        
+
         return (
-            self.elastic.De -
-            6 * self.elastic.G**2 * del_gam / q_tri * Id +
-            6 * self.elastic.G**2 * (del_gam / q_tri - 1 / f_ip1_prime) * np.outer(n_bar, n_bar) -
-            3 * np.sqrt(6) * self.elastic.G**2 * self.k * theta**2 * del_gam / (q_tri * f_ip1_prime) * np.outer(N4d_alpha, n_bar)
+            self.elastic.De
+            - 6 * self.elastic.G**2 * del_gam / q_tri * Id
+            + 6
+            * self.elastic.G**2
+            * (del_gam / q_tri - 1 / f_ip1_prime)
+            * np.outer(n_bar, n_bar)
+            - 3
+            * np.sqrt(6)
+            * self.elastic.G**2
+            * self.k
+            * theta**2
+            * del_gam
+            / (q_tri * f_ip1_prime)
+            * np.outer(N4d_alpha, n_bar)
         )
 
 
 class AF_kinematic_n(Material_expression_base):
-    def __init__(self, elastic: Elastic, sig_y: float, Cs: list[float], ks: list[float]):
+    def __init__(
+        self, elastic: Elastic, sig_y: float, Cs: list[float], ks: list[float]
+    ):
         super().__init__(elastic, sig_y)
         self.Cs = Cs
         self.ks = ks
@@ -423,18 +481,22 @@ class AF_kinematic_n(Material_expression_base):
         return sum(self.alpha_is)
 
     def initialize(self):
-        self.alphas = [np.zeros(6)]*self.number
-        self.alpha_is = [np.zeros(6)]*self.number
+        self.alphas = [np.zeros(6)] * self.number
+        self.alpha_is = [np.zeros(6)] * self.number
         self.eps_p = np.zeros(6)
         self.eps_p_i = np.zeros(6)
         self.eff_eps_p = 0.0
         self.eff_eps_p_i = 0.0
 
     def update_i(self, del_gam, n_bar):
-        delta_eps_p = np.sqrt(3 / 2) * del_gam * n_bar * np.array([1.0, 1.0, 1.0, 2.0, 2.0, 2.0])
+        delta_eps_p = (
+            np.sqrt(3 / 2) * del_gam * n_bar * np.array([1.0, 1.0, 1.0, 2.0, 2.0, 2.0])
+        )
         for n in range(self.number):
             theta_n = 1 / (1 + self.ks[n] * del_gam)
-            self.alpha_is[n] = theta_n * (self.alphas[n] + np.sqrt(2 / 3) * self.Cs[n] * del_gam * n_bar)
+            self.alpha_is[n] = theta_n * (
+                self.alphas[n] + np.sqrt(2 / 3) * self.Cs[n] * del_gam * n_bar
+            )
         self.eps_p_i = self.eps_p + delta_eps_p
         self.eff_eps_p_i = self.eff_eps_p + del_gam
 
@@ -474,17 +536,27 @@ class AF_kinematic_n(Material_expression_base):
         for n in range(self.number):
             theta_n = 1 / (1 + self.ks[n] * del_gam)
             N4d_alpha += self.ks[n] * theta_n**2 * N4d @ self.alphas[n]
-        
+
         return (
-            self.elastic.De -
-            6 * self.elastic.G**2 * del_gam / q_tri * Id +
-            6 * self.elastic.G**2 * (del_gam / q_tri - 1 / f_ip1_prime) * np.outer(n_bar, n_bar) -
-            3 * np.sqrt(6) * self.elastic.G**2 * del_gam / (q_tri * f_ip1_prime) * np.outer(N4d_alpha, n_bar)
+            self.elastic.De
+            - 6 * self.elastic.G**2 * del_gam / q_tri * Id
+            + 6
+            * self.elastic.G**2
+            * (del_gam / q_tri - 1 / f_ip1_prime)
+            * np.outer(n_bar, n_bar)
+            - 3
+            * np.sqrt(6)
+            * self.elastic.G**2
+            * del_gam
+            / (q_tri * f_ip1_prime)
+            * np.outer(N4d_alpha, n_bar)
         )
 
 
 class Chaboche(Material_expression_base):
-    def __init__(self, elastic: Elastic, sig_y: float, C: float, k: float, Q: float, b: float):
+    def __init__(
+        self, elastic: Elastic, sig_y: float, C: float, k: float, Q: float, b: float
+    ):
         super().__init__(elastic, sig_y)
         self.C = C
         self.k = k
@@ -508,9 +580,13 @@ class Chaboche(Material_expression_base):
     def update_i(self, del_gam, n_bar):
         theta_i = 1 / (1 + self.b * del_gam)
         self.r_i = theta_i * (self.r + self.b * self.Q * del_gam)
-        delta_eps_p = np.sqrt(3 / 2) * del_gam * n_bar * np.array([1.0, 1.0, 1.0, 2.0, 2.0, 2.0])
+        delta_eps_p = (
+            np.sqrt(3 / 2) * del_gam * n_bar * np.array([1.0, 1.0, 1.0, 2.0, 2.0, 2.0])
+        )
         theta_k = 1 / (1 + self.k * del_gam)
-        self.alpha_i = theta_k * (self.alpha + np.sqrt(2 / 3) * self.C * del_gam * n_bar)
+        self.alpha_i = theta_k * (
+            self.alpha + np.sqrt(2 / 3) * self.C * del_gam * n_bar
+        )
         self.eps_p_i = self.eps_p + delta_eps_p
         self.eff_eps_p_i = self.eff_eps_p + del_gam
 
@@ -529,17 +605,23 @@ class Chaboche(Material_expression_base):
         q_tri, n_bar = self.calc_tri(sig_d, del_gam)
         theta_k = 1 / (1 + self.k * del_gam)
         theta_i = 1 / (1 + self.b * del_gam)
-        return self.sig_y + 3 * self.elastic.G * del_gam + self.C * theta_k * del_gam + theta_i * (self.r + self.b * self.Q * del_gam) - q_tri
+        return (
+            self.sig_y
+            + 3 * self.elastic.G * del_gam
+            + self.C * theta_k * del_gam
+            + theta_i * (self.r + self.b * self.Q * del_gam)
+            - q_tri
+        )
 
     def calc_f_ip1_prime(self, sig_d: np.ndarray, del_gam: float):
         theta_i = 1 / (1 + self.b * del_gam)
         theta_k = 1 / (1 + self.k * del_gam)
         return (
-            3 * self.elastic.G +
-            self.C * theta_k -
-            self.k * self.C * theta_k**2 * del_gam -
-            self.b * theta_i**2 * (self.r + self.b * self.Q * del_gam) +
-            self.b * self.Q * theta_i
+            3 * self.elastic.G
+            + self.C * theta_k
+            - self.k * self.C * theta_k**2 * del_gam
+            - self.b * theta_i**2 * (self.r + self.b * self.Q * del_gam)
+            + self.b * self.Q * theta_i
         )
 
     def calc_Dep(self, sig_d: np.ndarray, del_gam: float):
@@ -550,17 +632,35 @@ class Chaboche(Material_expression_base):
         theta_k = 1 / (1 + self.k * del_gam)
         N4d = I - np.outer(n_bar, n_bar)
         N4d_alpha = N4d @ self.alpha
-        
+
         return (
-            self.elastic.De -
-            6 * self.elastic.G**2 * del_gam / q_tri * Id +
-            6 * self.elastic.G**2 * (del_gam / q_tri - 1 / f_ip1_prime) * np.outer(n_bar, n_bar) -
-            3 * np.sqrt(6) * self.elastic.G**2 * self.k * theta_k**2 * del_gam / (q_tri * f_ip1_prime) * np.outer(N4d_alpha, n_bar)
+            self.elastic.De
+            - 6 * self.elastic.G**2 * del_gam / q_tri * Id
+            + 6
+            * self.elastic.G**2
+            * (del_gam / q_tri - 1 / f_ip1_prime)
+            * np.outer(n_bar, n_bar)
+            - 3
+            * np.sqrt(6)
+            * self.elastic.G**2
+            * self.k
+            * theta_k**2
+            * del_gam
+            / (q_tri * f_ip1_prime)
+            * np.outer(N4d_alpha, n_bar)
         )
 
 
 class Chaboche_n(Material_expression_base):
-    def __init__(self, elastic: Elastic, sig_y: float, Cs: list[float], ks: list[float], Qs: list[float], bs: list[float]):
+    def __init__(
+        self,
+        elastic: Elastic,
+        sig_y: float,
+        Cs: list[float],
+        ks: list[float],
+        Qs: list[float],
+        bs: list[float],
+    ):
         super().__init__(elastic, sig_y)
         self.Cs = Cs
         self.ks = ks
@@ -595,10 +695,9 @@ class Chaboche_n(Material_expression_base):
     def r_i(self):
         return sum(self.r_is)
 
-
     def initialize(self):
-        self.alphas = [np.zeros(6)]*self.number_k
-        self.alpha_is = [np.zeros(6)]*self.number_k
+        self.alphas = [np.zeros(6)] * self.number_k
+        self.alpha_is = [np.zeros(6)] * self.number_k
         self.rs = [0.0] * self.number_i
         self.r_is = [0.0] * self.number_i
         self.eps_p = np.zeros(6)
@@ -607,13 +706,19 @@ class Chaboche_n(Material_expression_base):
         self.eff_eps_p_i = 0.0
 
     def update_i(self, del_gam, n_bar):
-        delta_eps_p = np.sqrt(3 / 2) * del_gam * n_bar * np.array([1.0, 1.0, 1.0, 2.0, 2.0, 2.0])
+        delta_eps_p = (
+            np.sqrt(3 / 2) * del_gam * n_bar * np.array([1.0, 1.0, 1.0, 2.0, 2.0, 2.0])
+        )
         for n_k in range(self.number_k):
             theta_n_k = 1 / (1 + self.ks[n_k] * del_gam)
-            self.alpha_is[n_k] = theta_n_k * (self.alphas[n_k] + np.sqrt(2 / 3) * self.Cs[n_k] * del_gam * n_bar)
+            self.alpha_is[n_k] = theta_n_k * (
+                self.alphas[n_k] + np.sqrt(2 / 3) * self.Cs[n_k] * del_gam * n_bar
+            )
         for n_i in range(self.number_i):
             theta_n_i = 1 / (1 + self.bs[n_i] * del_gam)
-            self.r_is[n_i] = theta_n_i * (self.rs[n_i] + self.bs[n_i] * self.Qs[n_i] * del_gam)
+            self.r_is[n_i] = theta_n_i * (
+                self.rs[n_i] + self.bs[n_i] * self.Qs[n_i] * del_gam
+            )
         self.eps_p_i = self.eps_p + delta_eps_p
         self.eff_eps_p_i = self.eff_eps_p + del_gam
 
@@ -647,11 +752,18 @@ class Chaboche_n(Material_expression_base):
         E_prime = 0.0
         for n_k in range(self.number_k):
             theta_n_k = 1 / (1 + self.ks[n_k] * del_gam)
-            E_prime += self.Cs[n_k] * (theta_n_k - self.ks[n_k] * theta_n_k**2 * del_gam)
+            E_prime += self.Cs[n_k] * (
+                theta_n_k - self.ks[n_k] * theta_n_k**2 * del_gam
+            )
         G_prime = 0.0
         for n_i in range(self.number_i):
             theta_n_i = 1 / (1 + self.bs[n_i] * del_gam)
-            G_prime += -self.bs[n_i] * theta_n_i**2 * (self.rs[n_i] + self.bs[n_i] * self.Qs[n_i] * del_gam) + theta_n_i * self.bs[n_i] * self.Qs[n_i]
+            G_prime += (
+                -self.bs[n_i]
+                * theta_n_i**2
+                * (self.rs[n_i] + self.bs[n_i] * self.Qs[n_i] * del_gam)
+                + theta_n_i * self.bs[n_i] * self.Qs[n_i]
+            )
         return 3 * self.elastic.G + E_prime + G_prime
 
     def calc_Dep(self, sig_d: np.ndarray, del_gam: float):
@@ -664,12 +776,20 @@ class Chaboche_n(Material_expression_base):
         for n_k in range(self.number_k):
             theta_n_k = 1 / (1 + self.ks[n_k] * del_gam)
             N4d_alpha += self.ks[n_k] * theta_n_k**2 * N4d @ self.alphas[n_k]
-        
+
         return (
-            self.elastic.De -
-            6 * self.elastic.G**2 * del_gam / q_tri * Id +
-            6 * self.elastic.G**2 * (del_gam / q_tri - 1 / f_ip1_prime) * np.outer(n_bar, n_bar) -
-            3 * np.sqrt(6) * self.elastic.G**2 * del_gam / (q_tri * f_ip1_prime) * np.outer(N4d_alpha, n_bar)
+            self.elastic.De
+            - 6 * self.elastic.G**2 * del_gam / q_tri * Id
+            + 6
+            * self.elastic.G**2
+            * (del_gam / q_tri - 1 / f_ip1_prime)
+            * np.outer(n_bar, n_bar)
+            - 3
+            * np.sqrt(6)
+            * self.elastic.G**2
+            * del_gam
+            / (q_tri * f_ip1_prime)
+            * np.outer(N4d_alpha, n_bar)
         )
 
 
@@ -758,7 +878,7 @@ class Yoshida_uemori:
         g_stag = self.calc_g_stag(xi_n, self.r)
         g_stag_flow = (self.Q @ xi_n) @ delta_beta
         if g_stag > -self.TOL and g_stag_flow > -self.TOL:
-            logger.info("Hardening evolution")
+            logger.debug("Hardening evolution")
             xi = self.beta - self.q
             if abs(np.sqrt(self.calc_g_stag(xi, self.r))) < self.TOL:
                 delta_beta_s = delta_beta
@@ -766,7 +886,13 @@ class Yoshida_uemori:
                 xi_xi = (self.Q @ xi) @ xi
                 dbeta_dbeta = (self.Q @ delta_beta) @ delta_beta
                 xi_dbeta = (self.Q @ xi) @ delta_beta
-                r_diff = (-3 * xi_dbeta + np.sqrt((3 * xi_dbeta)**2 - 3 * dbeta_dbeta * (3 * xi_xi - 2 * self.r**2))) / (3 * dbeta_dbeta)
+                r_diff = (
+                    -3 * xi_dbeta
+                    + np.sqrt(
+                        (3 * xi_dbeta) ** 2
+                        - 3 * dbeta_dbeta * (3 * xi_xi - 2 * self.r**2)
+                    )
+                ) / (3 * dbeta_dbeta)
                 beta_s = xi + r_diff * delta_beta
                 xi_s = beta_s - self.q
                 delta_beta_s = (1 - r_diff) * delta_beta
@@ -775,18 +901,28 @@ class Yoshida_uemori:
             if abs(self.r) < self.TOL:
                 delta_mu = 3 * xi_P_xi / (6 * self.h * xi_P_del_beta) - 1
             else:
-                s = (-3 * self.h * xi_P_del_beta + np.sqrt((3 * self.h * xi_P_del_beta)**2 + 4 * self.r**2 * 3 / 2 * xi_P_xi)) / (2 * self.r**2)
+                s = (
+                    -3 * self.h * xi_P_del_beta
+                    + np.sqrt(
+                        (3 * self.h * xi_P_del_beta) ** 2
+                        + 4 * self.r**2 * 3 / 2 * xi_P_xi
+                    )
+                ) / (2 * self.r**2)
                 delta_mu = s - 1
                 if delta_mu < 0.0:
                     raise ValueError(f"Delta mu is negative({delta_mu})")
             xi_i = xi_n / (1 + delta_mu)
             q_dot_i = delta_mu * xi_i
             self.q_i = self.q + q_dot_i
-            self.r_i = np.sqrt(self.r**2 + 3 * self.h * (self.Q @ xi_i) @ (delta_beta_s))
-            self.R_i = 1 / (1 + self.k * delta_gam) * (self.R + self.k * self.Rsat * delta_gam)
+            self.r_i = np.sqrt(
+                self.r**2 + 3 * self.h * (self.Q @ xi_i) @ (delta_beta_s)
+            )
+            self.R_i = (
+                1 / (1 + self.k * delta_gam) * (self.R + self.k * self.Rsat * delta_gam)
+            )
             xi_last = self.beta_i - self.q_i
         else:
-            logger.info("Hardening stagnation")
+            logger.debug("Hardening stagnation")
             self.q_i = self.q
             self.r_i = self.r
             self.R_i = self.R
@@ -819,7 +955,10 @@ class Yoshida_uemori:
         xi_n = self.beta + delta_beta - self.q
         xi_P_del_beta = xi_n @ (Id_s @ delta_beta)
         xi_P_xi = xi_n @ (Id_s @ xi_n)
-        return (3 * self.h * xi_P_del_beta + np.sqrt((3 * self.h * xi_P_del_beta)**2 + 6 * self.r**2 * xi_P_xi)) / (2 * self.r**2) - 1
+        return (
+            3 * self.h * xi_P_del_beta
+            + np.sqrt((3 * self.h * xi_P_del_beta) ** 2 + 6 * self.r**2 * xi_P_xi)
+        ) / (2 * self.r**2) - 1
 
     def calc_f_f(self, eta):
         g_eta, n_s = self.calc_g(eta)
@@ -828,8 +967,8 @@ class Yoshida_uemori:
     def calc_j_f_f(self, eta):
         g_eta, n_s_f = self.calc_g_flow(eta)
         f_f_dsig = n_s_f
-        f_f_dbeta = - n_s_f
-        f_f_dtheta = - n_s_f
+        f_f_dbeta = -n_s_f
+        f_f_dtheta = -n_s_f
         f_f_dgamma = [0.0]
         vectors = (f_f_dsig, f_f_dbeta, f_f_dtheta, f_f_dgamma)
         return np.hstack(vectors)
@@ -840,90 +979,154 @@ class Yoshida_uemori:
 
     def calc_j_f_ep(self, sig_d, sig_d_tri, eta, delta_gam):
         g_eta, n_s_f = self.calc_g_flow(eta)
-        updated_factor = self.calc_De_factor(self.Ea, self.elastic.E, self.psi, self.eff_eps_p + delta_gam)
-        dn_dsig = 3 /(2 * g_eta) * (I - np.outer(n_s_f / np.sqrt(3 / 2), n_s_f / np.sqrt(3 / 2)))
-        f_ep_dsig = ((1 / updated_factor) * self.elastic.De_inv + delta_gam * dn_dsig)
-        f_ep_dbeta = - delta_gam * dn_dsig
-        f_ep_dtheta = - delta_gam * dn_dsig
-        factor = 1.0 - (1 - self.Ea / self.elastic.E) * (1 - np.exp(-self.psi * (self.eff_eps_p + delta_gam)))
-        f_ep_dgamma = self.psi * (factor - self.Ea / self.elastic.E) / factor**2 * self.elastic.De_inv @ (sig_d - sig_d_tri) + n_s_f
-        matrices = (f_ep_dsig, f_ep_dbeta, f_ep_dtheta, np.matrix(f_ep_dgamma).transpose())
+        updated_factor = self.calc_De_factor(
+            self.Ea, self.elastic.E, self.psi, self.eff_eps_p + delta_gam
+        )
+        dn_dsig = (
+            3
+            / (2 * g_eta)
+            * (I - np.outer(n_s_f / np.sqrt(3 / 2), n_s_f / np.sqrt(3 / 2)))
+        )
+        f_ep_dsig = (1 / updated_factor) * self.elastic.De_inv + delta_gam * dn_dsig
+        f_ep_dbeta = -delta_gam * dn_dsig
+        f_ep_dtheta = -delta_gam * dn_dsig
+        factor = 1.0 - (1 - self.Ea / self.elastic.E) * (
+            1 - np.exp(-self.psi * (self.eff_eps_p + delta_gam))
+        )
+        f_ep_dgamma = (
+            self.psi
+            * (factor - self.Ea / self.elastic.E)
+            / factor**2
+            * self.elastic.De_inv
+            @ (sig_d - sig_d_tri)
+            + n_s_f
+        )
+        matrices = (
+            f_ep_dsig,
+            f_ep_dbeta,
+            f_ep_dtheta,
+            np.matrix(f_ep_dgamma).transpose(),
+        )
         return np.hstack(matrices)
 
     def calc_f_beta(self, eta, beta, delta_gam):
-        return beta - self.beta - (self.k * self.b / self.sig_y *  eta - self.k * (beta)) * delta_gam
+        return (
+            beta
+            - self.beta
+            - (self.k * self.b / self.sig_y * eta - self.k * (beta)) * delta_gam
+        )
 
     def calc_j_f_beta(self, eta, beta, delta_gam):
-        f_beta_dsig = - self.k * self.b * delta_gam / self.sig_y * I
-        f_beta_dbeta = (1.0 + self.k * self.b / self.sig_y * delta_gam + self.k * delta_gam) * I
+        f_beta_dsig = -self.k * self.b * delta_gam / self.sig_y * I
+        f_beta_dbeta = (
+            1.0 + self.k * self.b / self.sig_y * delta_gam + self.k * delta_gam
+        ) * I
         f_beta_dtheta = self.k * self.b * delta_gam / self.sig_y * I
-        f_beta_dgamma = - self.k * self.b / self.sig_y * eta + self.k * (beta)
-        matrices = (f_beta_dsig, f_beta_dbeta, f_beta_dtheta, np.matrix(f_beta_dgamma).transpose())
+        f_beta_dgamma = -self.k * self.b / self.sig_y * eta + self.k * (beta)
+        matrices = (
+            f_beta_dsig,
+            f_beta_dbeta,
+            f_beta_dtheta,
+            np.matrix(f_beta_dgamma).transpose(),
+        )
         return np.hstack(matrices)
 
     def calc_f_theta(self, eta, theta, a, delta_gam):
         theta_bar = np.sqrt(3 / 2) * self.calc_stress_norm(theta)
         if theta_bar == 0.0:
             return theta - self.theta - a * self.C * delta_gam / self.sig_y * eta
-        return theta - self.theta - a * self.C * delta_gam / self.sig_y * eta + self.C * delta_gam * np.sqrt(a / theta_bar) * theta
+        return (
+            theta
+            - self.theta
+            - a * self.C * delta_gam / self.sig_y * eta
+            + self.C * delta_gam * np.sqrt(a / theta_bar) * theta
+        )
 
     def calc_j_f_theta(self, eta, theta, a, delta_gam, hardening_flag):
         theta_bar = np.sqrt(3 / 2) * self.calc_stress_norm(theta)
         s = 1 / (1 + self.k * delta_gam)
         if hardening_flag:
-            a_prime = - self.k * s**2 * (self.R + self.k * self.Rsat * delta_gam) + s * self.k * self.Rsat
+            a_prime = (
+                -self.k * s**2 * (self.R + self.k * self.Rsat * delta_gam)
+                + s * self.k * self.Rsat
+            )
         else:
             a_prime = 0.0
-        f_theta_dsig = - a * self.C * delta_gam / self.sig_y * I
+        f_theta_dsig = -a * self.C * delta_gam / self.sig_y * I
         f_theta_dbeta = a * self.C * delta_gam / self.sig_y * I
         if theta_bar == 0.0:
-            f_theta_dtheta =  (1 + a * self.C * delta_gam / self.sig_y) * I
+            f_theta_dtheta = (1 + a * self.C * delta_gam / self.sig_y) * I
             f_theta_dgamma = (
-                - a * self.C / self.sig_y -
-                self.C * delta_gam / self.sig_y * a_prime
+                -a * self.C / self.sig_y - self.C * delta_gam / self.sig_y * a_prime
             ) * eta
         else:
             n_bar_theta = self.Q @ theta / (theta_bar / np.sqrt(3 / 2))
-            f_theta_dtheta =  (
-                1 + a * self.C * delta_gam / self.sig_y +
-                self.C * delta_gam * np.sqrt(a / theta_bar)) * I - (
-                    np.sqrt(3 / 2) * self.C * delta_gam * np.sqrt(a / theta_bar) / (2 * theta_bar) * np.outer(n_bar_theta, theta)
-                )
-            f_theta_dgamma = (
-                - a * self.C / self.sig_y * eta -
-                self.C * delta_gam / self.sig_y * a_prime * eta +
-                self.C * np.sqrt(a / theta_bar) * theta +
-                self.C * delta_gam * np.sqrt(1.0 / (theta_bar * a)) * a_prime / 2 * theta
+            f_theta_dtheta = (
+                1
+                + a * self.C * delta_gam / self.sig_y
+                + self.C * delta_gam * np.sqrt(a / theta_bar)
+            ) * I - (
+                np.sqrt(3 / 2)
+                * self.C
+                * delta_gam
+                * np.sqrt(a / theta_bar)
+                / (2 * theta_bar)
+                * np.outer(n_bar_theta, theta)
             )
-        matrices = (f_theta_dsig, f_theta_dbeta, f_theta_dtheta, np.matrix(f_theta_dgamma).transpose())
+            f_theta_dgamma = (
+                -a * self.C / self.sig_y * eta
+                - self.C * delta_gam / self.sig_y * a_prime * eta
+                + self.C * np.sqrt(a / theta_bar) * theta
+                + self.C
+                * delta_gam
+                * np.sqrt(1.0 / (theta_bar * a))
+                * a_prime
+                / 2
+                * theta
+            )
+        matrices = (
+            f_theta_dsig,
+            f_theta_dbeta,
+            f_theta_dtheta,
+            np.matrix(f_theta_dgamma).transpose(),
+        )
         return np.hstack(matrices)
-    
+
     def calc_f_theta_dtheta(self, theta, a, delta_gam):
         theta_bar = np.sqrt(3 / 2) * self.calc_stress_norm(theta)
         n_bar_theta = self.Q @ theta / (theta_bar / np.sqrt(3 / 2))
-        f_theta_dtheta =  (
-            1 + a * self.C * delta_gam / self.sig_y +
-            self.C * delta_gam * np.sqrt(a / theta_bar)) * I - (
-                np.sqrt(3 / 2) * self.C * delta_gam * np.sqrt(a) / (2 * theta_bar * np.sqrt(theta_bar)) * np.outer(n_bar_theta, theta)
-            )
+        f_theta_dtheta = (
+            1
+            + a * self.C * delta_gam / self.sig_y
+            + self.C * delta_gam * np.sqrt(a / theta_bar)
+        ) * I - (
+            np.sqrt(3 / 2)
+            * self.C
+            * delta_gam
+            * np.sqrt(a)
+            / (2 * theta_bar * np.sqrt(theta_bar))
+            * np.outer(n_bar_theta, theta)
+        )
         return f_theta_dtheta
 
     def calc_f_theta_dgamma(self, eta, theta, a, a_prime, delta_gam):
         theta_bar = np.sqrt(3 / 2) * self.calc_stress_norm(theta)
         f_theta_dgamma = (
-            - a * self.C / self.sig_y * eta -
-            self.C * delta_gam / self.sig_y * a_prime * eta +
-            self.C * np.sqrt(a / theta_bar) * theta +
-            self.C * delta_gam * np.sqrt(1 / theta_bar / a) * a_prime / 2 * theta
+            -a * self.C / self.sig_y * eta
+            - self.C * delta_gam / self.sig_y * a_prime * eta
+            + self.C * np.sqrt(a / theta_bar) * theta
+            + self.C * delta_gam * np.sqrt(1 / theta_bar / a) * a_prime / 2 * theta
         )
         return f_theta_dgamma
 
-    def calc_jacobian(self, sig_d, sig_d_tri, eta, beta, theta, a, delta_gam, hardening_flag):
+    def calc_jacobian(
+        self, sig_d, sig_d_tri, eta, beta, theta, a, delta_gam, hardening_flag
+    ):
         j_f_f = self.calc_j_f_f(eta)
         j_f_ep = self.calc_j_f_ep(sig_d, sig_d_tri, eta, delta_gam)
         j_f_beta = self.calc_j_f_beta(eta, beta, delta_gam)
         j_f_theta = self.calc_j_f_theta(eta, theta, a, delta_gam, hardening_flag)
-        matrices = (j_f_f, j_f_ep, j_f_beta, j_f_theta)
+        matrices = (j_f_ep, j_f_beta, j_f_theta, j_f_f)
         return np.vstack(matrices)
 
     def calc_f_vector(self, sig_d, sig_d_tri, beta, theta, a, delta_gam):
@@ -932,11 +1135,13 @@ class Yoshida_uemori:
         f_ep = self.calc_f_ep(sig_d, sig_d_tri, eta, delta_gam)
         f_beta = self.calc_f_beta(eta, beta, delta_gam)
         f_theta = self.calc_f_theta(eta, theta, a, delta_gam)
-        vectors = ([f_f], f_ep, f_beta, f_theta)
+        vectors = (f_ep, f_beta, f_theta, [f_f])
         return np.hstack(vectors)
 
     def divide_delta_vector(self, delta_vector):
-        delta_sig, delta_beta, delta_theta, delta_gam_l = np.split(delta_vector, (6, 12, 18))
+        delta_sig, delta_beta, delta_theta, delta_gam_l = np.split(
+            delta_vector, (6, 12, 18)
+        )
         delta_gam = delta_gam_l[0]
         return delta_sig, delta_beta, delta_theta, delta_gam
 
@@ -946,6 +1151,7 @@ class Yoshida_uemori:
         eta_tri = sig_d_tri - self.theta - self.beta
         f_tri = self.calc_f_f(eta_tri)
         hardening_flag = True
+        jacobian = np.zeros((19, 19))
         if f_tri > 0.0:
             logger.debug("Plastic behavior")
             sig_d_i = sig_d
@@ -953,13 +1159,26 @@ class Yoshida_uemori:
             theta_i = self.theta
             a_i = self.B + self.R - self.sig_y
             eta_i = sig_d_i - beta_i - theta_i
-            f_vector = self.calc_f_vector(sig_d_i, sig_d_tri, beta_i, theta_i, a_i, delta_gam_i)
-            jacobian = self.calc_jacobian(sig_d_i, sig_d_tri, eta_i, beta_i, theta_i, a_i, delta_gam_i, hardening_flag)
+            f_vector = self.calc_f_vector(
+                sig_d_i, sig_d_tri, beta_i, theta_i, a_i, delta_gam_i
+            )
+            jacobian = self.calc_jacobian(
+                sig_d_i,
+                sig_d_tri,
+                eta_i,
+                beta_i,
+                theta_i,
+                a_i,
+                delta_gam_i,
+                hardening_flag,
+            )
             for inew in range(self.RM_I):
                 logger.debug(f"Newton iteration {inew+1}")
                 d_delta_vector = np.linalg.solve(jacobian, f_vector)
                 delta_vector -= np.array(d_delta_vector).flatten()
-                delta_sig, delta_beta, delta_theta, delta_gam_i = self.divide_delta_vector(delta_vector)
+                delta_sig, delta_beta, delta_theta, delta_gam_i = (
+                    self.divide_delta_vector(delta_vector)
+                )
                 sig_d_i = sig_d + delta_sig
                 beta_i = self.beta + delta_beta
                 theta_i = self.theta + delta_theta
@@ -968,17 +1187,36 @@ class Yoshida_uemori:
                 g_stag_flow = (self.Q @ xi_n) @ delta_beta
                 if g_stag > -self.TOL and g_stag_flow > -self.TOL:
                     hardening_flag = True
-                    R_i = 1 / (1 + self.k * delta_gam_i) * (self.R + self.k * self.Rsat * delta_gam_i)
+                    R_i = (
+                        1
+                        / (1 + self.k * delta_gam_i)
+                        * (self.R + self.k * self.Rsat * delta_gam_i)
+                    )
                     a_i = self.B + R_i - self.sig_y
                 else:
                     hardening_flag = False
                     a_i = self.B + self.R - self.sig_y
                 eta_i = sig_d_i - beta_i - theta_i
-                f_vector = self.calc_f_vector(sig_d_i, sig_d_tri, beta_i, theta_i, a_i, delta_gam_i)
-                jacobian = self.calc_jacobian(sig_d_i, sig_d_tri, eta_i, beta_i, theta_i, a_i, delta_gam_i, hardening_flag)
-                if np.linalg.norm(f_vector) < self.TOL:
+                f_vector = self.calc_f_vector(
+                    sig_d_i, sig_d_tri, beta_i, theta_i, a_i, delta_gam_i
+                )
+                jacobian = self.calc_jacobian(
+                    sig_d_i,
+                    sig_d_tri,
+                    eta_i,
+                    beta_i,
+                    theta_i,
+                    a_i,
+                    delta_gam_i,
+                    hardening_flag,
+                )
+                diff = np.linalg.norm(f_vector)
+                # logger.warning(f"Diff norm: {diff}")
+                if diff < self.TOL:
                     if delta_gam_i < 0.0:
-                        raise ValueError("Delta gamma is negative value.")
+                        raise ValueError(
+                            f"Delta gamma is negative value. {delta_gam_i}"
+                        )
                     logger.info(f"Return map converged itr.{inew+1}")
                     logger.debug(f"Delta gamma: {delta_gam_i}")
                     break
@@ -987,7 +1225,7 @@ class Yoshida_uemori:
                 raise NotConvergedError
         else:
             logger.debug("Elastic behavior")
-        return delta_vector, hardening_flag
+        return delta_vector, hardening_flag, jacobian
 
     def calc_Dep(self, sig_d, delta_gam, beta, theta, hardening_flag):
         if delta_gam == 0.0:
@@ -999,10 +1237,14 @@ class Yoshida_uemori:
             a = self.B + self.R_i - self.sig_y
         else:
             a = self.B + self.R - self.sig_y
-        factor = self.calc_De_factor(self.Ea, self.elastic.E, self.psi, self.eff_eps_p + delta_gam)
+        factor = self.calc_De_factor(
+            self.Ea, self.elastic.E, self.psi, self.eff_eps_p + delta_gam
+        )
         D_n_n_D = factor**2 * self.elastic.De @ (np.outer(m, m) @ self.elastic.De)
         n_D_n = factor * m @ (self.elastic.De @ m)
-        S = (self.C * a + self.k * self.b) / self.sig_y * eta - (self.C * np.sqrt(a / theta_bar) * theta + self.k * beta)
+        S = (self.C * a + self.k * self.b) / self.sig_y * eta - (
+            self.C * np.sqrt(a / theta_bar) * theta + self.k * beta
+        )
         n_s = m @ S
         return factor * self.elastic.De - D_n_n_D / (n_D_n + n_s)
 
@@ -1014,8 +1256,10 @@ class Yoshida_uemori:
         sig_tri = self.De @ eps_e_tri
         sig_d_tri = Id_s @ sig_tri
         sig_v = sig_tri - sig_d_tri
-        delta_vector, hardening_flag = self.return_mapping(sig_d_i, sig_d_tri)
-        delta_sig, delta_beta, delta_theta, delta_gam = self.divide_delta_vector(delta_vector)
+        delta_vector, hardening_flag, jacobian = self.return_mapping(sig_d_i, sig_d_tri)
+        delta_sig, delta_beta, delta_theta, delta_gam = self.divide_delta_vector(
+            delta_vector
+        )
         if delta_gam == 0.0:
             sig = sig_tri
             return sig, self.De
