@@ -1,3 +1,5 @@
+import datetime
+
 from src.shell.materials import (
     Elastic_sh,
     Linear_isotropic_sh,
@@ -52,45 +54,77 @@ yu_sh2 = Yoshida_uemori_sh2(
 
 a = [202.5, -220, 249.0, -248.87, 250.0]
 # a2 = [x / 2 for x in a1]
-a1 = [x / np.sqrt(3) / 1.5 for x in a]
+a1 = [x / 1.1 for x in a]
 
-idx = 3  # 0: exx, 1: eyy, 2: ezz, 3: gxy, 4: gyz, 5: gzx
-idx_sh = 2  # 0: exx, 1: eyy, 2: gxy
+idx = 0  # 0: exx, 1: eyy, 2: ezz, 3: gxy, 4: gyz, 5: gzx
+idx_sh = 0  # 0: exx, 1: eyy, 2: gxy
 
 goal_sig = np.zeros(6)
 goal_sig[idx] = a1[0]
 
-goal_sig_sh = np.zeros(3)
-goal_sig_sh[idx_sh] = a1[0]
+goal_sig_sh1 = np.zeros(3)
+goal_sig_sh1[idx_sh] = a1[0]
 # goal_sig[idx+1] = a2[0]
 # goal_sig[idx+2] = a3[0]
 
+goal_sig_sh2 = np.zeros(3)
+goal_sig_sh2[idx_sh] = a1[0]
+
+# solid
+solid_start = datetime.datetime.now()
 calculator = Calculator3D(yu, goal_sig, 0.01, 1.0e-05, 0.01)
 calculator.calculate_steps()
-
 if len(a1) >= 2:
     for iamp in range(1, len(a1)):
         calculator.goal_sig[idx] = a1[iamp]
         calculator.calculate_steps(is_init=False)
+solid_end = datetime.datetime.now()
 
-calculator_sh = Calculator3D_sh(yu_sh2, goal_sig_sh, 0.01, 1.0e-05, 0.01)
-calculator_sh.calculate_steps()
 
+# shell1
+shell1_start = datetime.datetime.now()
+calculator_sh1 = Calculator3D_sh(yu_sh, goal_sig_sh1, 0.01, 1.0e-05, 0.01)
+calculator_sh1.calculate_steps()
 if len(a1) >= 2:
     for iamp in range(1, len(a1)):
-        calculator_sh.goal_sig[idx_sh] = a1[iamp]
-        calculator_sh.calculate_steps(is_init=False)
+        calculator_sh1.goal_sig[idx_sh] = a1[iamp]
+        calculator_sh1.calculate_steps(is_init=False)
+shell1_end = datetime.datetime.now()
+
+
+# shell2
+shell2_start = datetime.datetime.now()
+calculator_sh2 = Calculator3D_sh(yu_sh2, goal_sig_sh2, 0.01, 1.0e-05, 0.01)
+calculator_sh2.calculate_steps()
+if len(a1) >= 2:
+    for iamp in range(1, len(a1)):
+        calculator_sh2.goal_sig[idx_sh] = a1[iamp]
+        calculator_sh2.calculate_steps(is_init=False)
+shell2_end = datetime.datetime.now()
 
 
 x = [e[idx] for e in calculator.output.eps]
 y = [s[idx] for s in calculator.output.sig]
 
-x2 = [e[idx_sh] for e in calculator_sh.output.eps]
-y2 = [s[idx_sh] for s in calculator_sh.output.sig]
+x1 = [e[idx_sh] for e in calculator_sh1.output.eps]
+y1 = [s[idx_sh] for s in calculator_sh1.output.sig]
+
+x2 = [e[idx_sh] for e in calculator_sh2.output.eps]
+y2 = [s[idx_sh] for s in calculator_sh2.output.sig]
 
 from matplotlib import pyplot as plt
 
 fig = plt.figure()
-plt.plot(x, y)
-plt.plot(x2, y2, linestyle="dashed")
+plt.plot(x, y, label="solid")
+plt.plot(x1, y1, linestyle="dotted", label="shell1")
+plt.plot(x2, y2, linestyle="dashed", label="shell2")
+plt.legend()
 plt.show()
+
+solid_time = solid_end - solid_start
+shell1_time = shell1_end - shell1_start
+shell2_time = shell2_end - shell2_start
+
+print("solid time:", solid_time)
+print("shell1 time:", shell1_time)
+print("shell2 time:", shell2_time)
