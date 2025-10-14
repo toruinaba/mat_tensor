@@ -50,9 +50,9 @@ yu_sh2 = Yoshida_uemori_sh2(
     elastic_sh, 124.0, 168.0, 500.0, 190.0, 12.5, 9.3, 0.5, 159000.0, 0.3
 )
 
-a = [202.5, -244, 249.0, -248.87, 250.0]
+a = [202.5, -220, 249.0, -248.87, 250.0]
 # a2 = [x / 2 for x in a1]
-a1 = [x / np.sqrt(3) / 1.6 for x in a]
+a1 = [x / np.sqrt(3) / 1.5 for x in a]
 
 idx = 3  # 0: exx, 1: eyy, 2: ezz, 3: gxy, 4: gyz, 5: gzx
 idx_sh = 2  # 0: exx, 1: eyy, 2: gxy
@@ -80,6 +80,7 @@ if len(a1) >= 2:
     for iamp in range(1, len(a1)):
         calculator_sh.goal_sig[idx_sh] = a1[iamp]
         calculator_sh.calculate_steps(is_init=False)
+
 
 x = [e[idx] for e in calculator.output.eps]
 y = [s[idx] for s in calculator.output.sig]

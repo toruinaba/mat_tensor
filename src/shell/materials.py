@@ -919,8 +919,65 @@ class Yoshida_uemori_sh2:
         self.theta_i = self.theta + delta_theta
         self.eps_p_i = self.eps_p + delta_gam * flow
         self.eff_eps_p_i = self.eff_eps_p + d_eff_eps_p
-        s = 1 / (1 + 2 / 3 * self.k * self.sig_y * delta_gam)
-        self.R_i = s * (self.R + 2 / 3 * self.k * self.sig_y * self.Rsat * delta_gam)
+        xi_n = self.beta_i - self.q
+        g_stag = 3 / 2 * self.calc_g(xi_n) - self.r * self.r
+        g_stag_flow = (xi_n) @ delta_beta
+        if g_stag > -self.TOL and g_stag_flow > -self.TOL:
+            logger.info("Hardening evolution")
+            xi = self.beta - self.q
+            g_s = 3 / 2 * self.calc_g(xi) - self.r * self.r
+            if np.sqrt(abs(g_s)) < self.TOL:
+                logger.info("On the stagnation surface")
+                delta_beta_s = delta_beta
+            else:
+                logger.info("Inside the stagnation surface")
+                xi_xi = (xi) @ (P @ xi)
+                dbeta_dbeta = (delta_beta) @ (P @ delta_beta)
+                xi_dbeta = (xi) @ (P @ delta_beta)
+                r_diff = (
+                    -3 * xi_dbeta
+                    + np.sqrt(
+                        (3 * xi_dbeta) ** 2
+                        - 3 * dbeta_dbeta * (3 * xi_xi - 2 * self.r**2)
+                    )
+                ) / (3 * dbeta_dbeta)
+                beta_s = xi + r_diff * delta_beta
+                xi_s = beta_s - self.q
+                delta_beta_s = (1 - r_diff) * delta_beta
+            test_xi = delta_beta_s - self.q
+            test_g_s = 3 / 2 * self.calc_g(test_xi) - self.r * self.r
+            logger.info(f"Difference from stagnation surface: {test_g_s}")
+            xi_P_del_beta = (xi_n) @ (P @ delta_beta_s)
+            xi_P_xi = (xi_n) @ (P @ xi_n)
+            if abs(self.r) < self.TOL:
+                delta_mu = 3 * xi_P_xi / (6 * self.h * xi_P_del_beta) - 1
+            else:
+                s = (
+                    -3 * self.h * xi_P_del_beta
+                    + np.sqrt(
+                        (3 * self.h * xi_P_del_beta) ** 2
+                        + 4 * self.r**2 * 3 / 2 * xi_P_xi
+                    )
+                ) / (2 * self.r**2)
+                delta_mu = s - 1
+                if delta_mu < 0.0:
+                    raise ValueError(f"Delta mu is negative({delta_mu})")
+            xi_i = xi_n / (1 + delta_mu)
+            q_dot_i = delta_mu * xi_i
+            self.q_i = self.q + q_dot_i
+            self.r_i = np.sqrt(self.r**2 + 3 * self.h * (xi_i) @ (P @ delta_beta_s))
+            s = 1 / (1 + 2 / 3 * self.k * self.sig_y * delta_gam)
+            self.R_i = s * (
+                self.R + 2 / 3 * self.k * self.sig_y * self.Rsat * delta_gam
+            )
+            xi_last = self.beta_i - self.q_i
+            test_g_last = 3 / 2 * self.calc_g(xi_last) - self.r_i * self.r_i
+            logger.info(f"Updated Difference from stagnation surface: {test_g_last}")
+        else:
+            logger.info("Hardening stagnation")
+            self.q_i = self.q
+            self.r_i = self.r
+            self.R_i = self.R
 
     def update(self):
         self.eps_p = self.eps_p_i
@@ -928,6 +985,8 @@ class Yoshida_uemori_sh2:
         self.beta = self.beta_i
         self.theta = self.theta_i
         self.R = self.R_i
+        self.q = self.q_i
+        self.r = self.r_i
 
     def calc_f_f(self, eta):
         g = self.calc_g(eta)
@@ -1216,10 +1275,18 @@ class Yoshida_uemori_sh2:
                 sig_i = sig + delta_sig
                 beta_i = self.beta + delta_beta
                 theta_i = self.theta + delta_theta
-                R_i = s * (
-                    self.R + 2 / 3 * self.k * self.sig_y * self.Rsat * delta_gam_i
-                )
-                a_i = self.B + R_i - self.sig_y
+                xi_n = beta_i - self.q
+                g_stag = 3 / 2 * self.calc_g(xi_n) - self.r * self.r
+                g_stag_flow = xi_n @ delta_beta
+                if g_stag > -self.TOL and g_stag_flow > -self.TOL:
+                    hardening_flag = True
+                    R_i = s * (
+                        self.R + 2 / 3 * self.k * self.sig_y * self.Rsat * delta_gam_i
+                    )
+                    a_i = self.B + R_i - self.sig_y
+                else:
+                    hardening_flag = False
+                    a_i = self.B + self.R - self.sig_y
                 eta_i = sig_i - beta_i - theta_i
                 f_vector = self.calc_f_vector(
                     sig_i, sig_tri, beta_i, theta_i, a_i, delta_gam_i
