@@ -1277,7 +1277,7 @@ class Yoshida_uemori_sh2:
                 theta_i = self.theta + delta_theta
                 xi_n = beta_i - self.q
                 g_stag = 3 / 2 * self.calc_g(xi_n) - self.r * self.r
-                g_stag_flow = xi_n @ delta_beta
+                g_stag_flow = xi_n @ (P @ delta_beta)
                 if g_stag > -self.TOL and g_stag_flow > -self.TOL:
                     hardening_flag = True
                     R_i = s * (
